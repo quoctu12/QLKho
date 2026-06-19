@@ -1,0 +1,4 @@
+- Bo sung ho ten sinh vien
+- Design file
+- Doc
+- Các features & use cases theo dạng markdown
