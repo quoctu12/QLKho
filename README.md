@@ -1,4 +1,5 @@
-- Bo sung ho ten sinh vien
-- Design file
-- Doc
-- Các features & use cases theo dạng markdown
+- Cap nhat phan source code
+- Đổi tên đề tài cho chính xác "Xây dựng hệ thống logistic phân hệ quản lý kho bãi" ở header, footer và phần cảm ơn.
+- Bổ sung phần công nghệ sử dụng và tài liệu tham khảo cho công nghệ đó (React, Nodejs)
+- Rút gọn vấn đề tồn đọng xuống 10 - Bỏ mục 10, 12.
+- Sửa lỗi chính tả "Nhước điểm", "nhà chung cấp", ...
