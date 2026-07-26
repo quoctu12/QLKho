@@ -1,0 +1,20 @@
+# Thư viện
+**/node_modules/
+**/vendor/
+
+# Thông tin bí mật
+**/.env
+**/.env.*
+!**/.env.example
+
+# File build
+**/dist/
+**/build/
+**/coverage/
+
+# File tạm
+*.log
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

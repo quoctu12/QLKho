@@ -1,0 +1,245 @@
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f3f6fb;
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 278px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    180deg,
+    #12345a 0%,
+    #0c2949 45%,
+    #071f38 100%
+  );
+  color: #ffffff;
+  overflow: hidden;
+  z-index: 1100;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-show {
+  transform: translateX(0);
+}
+
+.sidebar-hide {
+  transform: translateX(-100%);
+}
+
+/*
+|--------------------------------------------------------------------------
+| Phần logo Sidebar cố định
+|--------------------------------------------------------------------------
+*/
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  padding: 26px 22px 24px;
+  background-color: #12345a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 2;
+}
+
+.sidebar-logo {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ffffff;
+  font-size: 25px;
+  background: linear-gradient(
+    135deg,
+    #2490ff,
+    #146cff
+  );
+  box-shadow: 0 8px 18px rgba(22, 108, 255, 0.35);
+}
+
+.sidebar-brand-text h2 {
+  margin: 0 0 3px;
+  color: #ffffff;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.sidebar-brand-text span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 14px;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Chỉ phần danh sách menu được cuộn
+|--------------------------------------------------------------------------
+*/
+
+.sidebar-menu {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  padding: 20px 13px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 15px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.82);
+  text-decoration: none;
+  font-size: 17px;
+  font-weight: 400;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.sidebar-link i {
+  width: 22px;
+  flex-shrink: 0;
+  color: #b8d9f5;
+  font-size: 19px;
+  text-align: center;
+}
+
+.sidebar-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
+}
+
+.sidebar-link:hover i {
+  color: #ffffff;
+}
+
+.sidebar-link.active {
+  color: #ffffff;
+  background: linear-gradient(
+    135deg,
+    #1d75ef,
+    #237cff
+  );
+  box-shadow: 0 7px 18px rgba(16, 103, 241, 0.35);
+  font-weight: 500;
+}
+
+.sidebar-link.active i {
+  color: #ffffff;
+}
+
+/* Nội dung bên phải */
+.admin-main {
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  transition: margin-left 0.3s ease;
+}
+
+.admin-main.sidebar-open {
+  margin-left: 278px;
+}
+
+.admin-main.sidebar-closed {
+  margin-left: 0;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Header cố định khi cuộn trang
+|--------------------------------------------------------------------------
+*/
+
+.app-header {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  min-height: 72px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  z-index: 1000;
+}
+
+/* Nội dung trang */
+.admin-content {
+  width: 100%;
+  padding: 28px;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Thanh cuộn riêng của menu Sidebar
+|--------------------------------------------------------------------------
+*/
+
+.sidebar-menu {
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(255, 255, 255, 0.2)
+    transparent;
+}
+
+.sidebar-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Mobile */
+@media (max-width: 991.98px) {
+  .sidebar {
+    width: 278px;
+    box-shadow: 5px 0 18px rgba(0, 0, 0, 0.2);
+  }
+
+  .admin-main.sidebar-open,
+  .admin-main.sidebar-closed {
+    margin-left: 0;
+  }
+
+  .admin-content {
+    padding: 16px;
+  }
+
+  .app-header {
+    z-index: 1000;
+  }
+}
