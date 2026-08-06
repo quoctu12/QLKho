@@ -3,7 +3,9 @@ const express = require("express");
 const {
   getDashboardSummary,
   getStockMovementReport,
-  getInventoryValueByWarehouse,
+  getInventoryByWarehouse,
+  getInventoryAlertReport,
+  getReportFilterOptions,
 } = require("../controllers/reportController");
 
 const {
@@ -17,10 +19,6 @@ const router = express.Router();
 |--------------------------------------------------------------------------
 | Bảo vệ toàn bộ API báo cáo
 |--------------------------------------------------------------------------
-|
-| Chỉ ADMIN và MANAGER được truy cập Dashboard và báo cáo.
-| STAFF không có quyền xem các số liệu tổng quan và báo cáo.
-|
 */
 
 router.use(authenticate);
@@ -28,7 +26,7 @@ router.use(authorize("ADMIN", "MANAGER"));
 
 /*
 |--------------------------------------------------------------------------
-| Lấy số liệu tổng quan Dashboard
+| Tổng quan Dashboard
 |--------------------------------------------------------------------------
 */
 
@@ -39,7 +37,7 @@ router.get(
 
 /*
 |--------------------------------------------------------------------------
-| Lấy báo cáo nhập xuất kho
+| Báo cáo nhập xuất
 |--------------------------------------------------------------------------
 */
 
@@ -50,13 +48,35 @@ router.get(
 
 /*
 |--------------------------------------------------------------------------
-| Lấy giá trị tồn kho theo kho
+| Báo cáo tồn kho theo kho
 |--------------------------------------------------------------------------
 */
 
 router.get(
   "/inventory-by-warehouse",
-  getInventoryValueByWarehouse
+  getInventoryByWarehouse
+);
+
+/*
+|--------------------------------------------------------------------------
+| Báo cáo cảnh báo tồn kho
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  "/inventory-alerts",
+  getInventoryAlertReport
+);
+
+/*
+|--------------------------------------------------------------------------
+| Danh sách dữ liệu bộ lọc
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  "/filter-options",
+  getReportFilterOptions
 );
 
 module.exports = router;

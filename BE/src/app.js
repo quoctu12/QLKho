@@ -8,6 +8,8 @@ const pool = require("./config/database");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 
+const storagePolicyRoutes = require("./routes/storagePolicyRoutes");
+
 const productRoutes = require("./routes/productRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const unitRoutes = require("./routes/unitRoutes");
@@ -86,6 +88,14 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| Chính sách
+|--------------------------------------------------------------------------
+*/
+
+app.use("/api/storage-policies", storagePolicyRoutes);
 
 /*
 |--------------------------------------------------------------------------

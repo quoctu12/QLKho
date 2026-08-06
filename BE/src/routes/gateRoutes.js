@@ -14,7 +14,15 @@ const {
 
 const router = express.Router();
 
-// ADMIN và MANAGER và STAFF được xem danh sách cổng kho
+/*
+|--------------------------------------------------------------------------
+| Xem danh sách cổng kho
+|--------------------------------------------------------------------------
+|
+| STAFF cần xem cổng kho để lập phiếu nhập và phiếu xuất.
+|
+*/
+
 router.get(
   "/",
   authenticate,
@@ -22,7 +30,12 @@ router.get(
   getAllGates
 );
 
-// ADMIN và MANAGER được thêm cổng kho
+/*
+|--------------------------------------------------------------------------
+| Thêm cổng kho
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
   authenticate,
@@ -30,7 +43,12 @@ router.post(
   createGate
 );
 
-// ADMIN và MANAGER được cập nhật cổng kho
+/*
+|--------------------------------------------------------------------------
+| Cập nhật cổng kho
+|--------------------------------------------------------------------------
+*/
+
 router.put(
   "/:id",
   authenticate,
@@ -38,11 +56,16 @@ router.put(
   updateGate
 );
 
-// Chỉ ADMIN được xóa cổng kho
+/*
+|--------------------------------------------------------------------------
+| Xóa cổng kho
+|--------------------------------------------------------------------------
+*/
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("ADMIN"),
+  authorize("ADMIN", "MANAGER"),
   deleteGate
 );
 

@@ -14,35 +14,71 @@ const {
 
 const router = express.Router();
 
-// ADMIN và MANAGER được xem danh mục
+/*
+|--------------------------------------------------------------------------
+| Xem danh mục
+|--------------------------------------------------------------------------
+|
+| STAFF cần quyền này để chọn danh mục khi tạo sản phẩm.
+|
+*/
+
 router.get(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER",
+    "STAFF"
+  ),
   getAllCategories
 );
 
-// ADMIN và MANAGER được tạo danh mục
+/*
+|--------------------------------------------------------------------------
+| Thêm danh mục
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   createCategory
 );
 
-// ADMIN và MANAGER được cập nhật danh mục
+/*
+|--------------------------------------------------------------------------
+| Cập nhật danh mục
+|--------------------------------------------------------------------------
+*/
+
 router.put(
   "/:id",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   updateCategory
 );
 
-// Chỉ ADMIN được xóa danh mục
+/*
+|--------------------------------------------------------------------------
+| Xóa danh mục
+|--------------------------------------------------------------------------
+*/
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("ADMIN"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   deleteCategory
 );
 

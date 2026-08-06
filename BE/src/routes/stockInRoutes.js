@@ -4,7 +4,6 @@ const {
   getAllStockIns,
   getStockInById,
   createStockIn,
-  updateStockInDetailPrice,
 } = require("../controllers/stockInController");
 
 const {
@@ -14,7 +13,12 @@ const {
 
 const router = express.Router();
 
-// ADMIN, MANAGER và STAFF đều được xem danh sách phiếu nhập
+/*
+|--------------------------------------------------------------------------
+| Lấy danh sách phiếu nhập
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/",
   authenticate,
@@ -22,7 +26,12 @@ router.get(
   getAllStockIns
 );
 
-// ADMIN, MANAGER và STAFF đều được xem chi tiết phiếu nhập
+/*
+|--------------------------------------------------------------------------
+| Lấy chi tiết một phiếu nhập
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/:id",
   authenticate,
@@ -30,20 +39,17 @@ router.get(
   getStockInById
 );
 
-// ADMIN, MANAGER và STAFF đều được tạo phiếu nhập kho
+/*
+|--------------------------------------------------------------------------
+| Tạo phiếu nhập
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
   authenticate,
   authorize("ADMIN", "MANAGER", "STAFF"),
   createStockIn
-);
-
-// Chỉ ADMIN và MANAGER được sửa giá nhập
-router.put(
-  "/:stockInId/details/:detailId/price",
-  authenticate,
-  authorize("ADMIN", "MANAGER"),
-  updateStockInDetailPrice
 );
 
 module.exports = router;

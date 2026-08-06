@@ -45,24 +45,3 @@ export async function createStockIn(stockInData) {
 
   return response.data;
 }
-
-/*
-|--------------------------------------------------------------------------
-| Cập nhật giá nhập của một chi tiết phiếu
-|--------------------------------------------------------------------------
-*/
-
-export async function updateStockInDetailPrice(
-  stockInId,
-  detailId,
-  importPrice
-) {
-  const response = await axiosClient.put(
-    `/stock-ins/${stockInId}/details/${detailId}/price`,
-    {
-      import_price: Number(importPrice),
-    }
-  );
-
-  return response.data;
-}

@@ -8,7 +8,30 @@ import {
   updateStoragePricingStatus,
 } from "../api/storagePricingApi";
 
+import { useAuth } from "../contexts/AuthContext";
+
+function getTodayInputValue() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function StoragePricingPage() {
+  const { user } = useAuth();
+
+  const currentRole = String(
+    user?.role || ""
+  ).toUpperCase();
+
+  const canManageStoragePricing = [
+    "ADMIN",
+    "MANAGER",
+  ].includes(currentRole);
+
   const [pricingList, setPricingList] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
 
@@ -20,14 +43,19 @@ function StoragePricingPage() {
   const [formData, setFormData] = useState({
     warehouse_id: "",
     price_per_container_per_day: "",
-    effective_from: new Date().toISOString().slice(0, 10),
+    effective_from: getTodayInputValue(),
     status: "active",
   });
 
   const [loading, setLoading] = useState(true);
-  const [loadingWarehouses, setLoadingWarehouses] = useState(true);
+  const [loadingWarehouses, setLoadingWarehouses] =
+    useState(true);
+
   const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState(null);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] =
+    useState("");
 
   /*
   |--------------------------------------------------------------------------
@@ -46,9 +74,15 @@ function StoragePricingPage() {
 
       const data = await getWarehouses();
 
-      setWarehouses(Array.isArray(data) ? data : []);
+      setWarehouses(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
-      console.error("Lỗi tải danh sách kho:", err);
+      console.error(
+        "Lỗi tải danh sách kho:",
+        err
+      );
+
       setWarehouses([]);
     } finally {
       setLoadingWarehouses(false);
@@ -62,9 +96,16 @@ function StoragePricingPage() {
 
       const data = await getStoragePricing(params);
 
-      setPricingList(Array.isArray(data) ? data : []);
+      setPricingList(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
-      console.error("Lỗi tải đơn giá lưu kho:", err);
+      console.error(
+        "Lỗi tải đơn giá lưu kho:",
+        err
+      );
+
+      setPricingList([]);
 
       setError(
         err.response?.data?.message ||
@@ -77,7 +118,7 @@ function StoragePricingPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Xử lý bộ lọc
+  | Bộ lọc
   |--------------------------------------------------------------------------
   */
 
@@ -94,7 +135,8 @@ function StoragePricingPage() {
     const params = {};
 
     if (filters.warehouse_id) {
-      params.warehouse_id = filters.warehouse_id;
+      params.warehouse_id =
+        filters.warehouse_id;
     }
 
     if (filters.status) {
@@ -106,6 +148,7 @@ function StoragePricingPage() {
 
   function handleSearch(event) {
     event.preventDefault();
+
     loadPricing(buildFilterParams());
   }
 
@@ -120,7 +163,7 @@ function StoragePricingPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Xử lý form thêm đơn giá
+  | Form đơn giá
   |--------------------------------------------------------------------------
   */
 
@@ -136,8 +179,24 @@ function StoragePricingPage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    const warehouseId = Number(formData.warehouse_id);
-    const price = Number(formData.price_per_container_per_day);
+    setError("");
+    setSuccessMessage("");
+
+    if (!canManageStoragePricing) {
+      setError(
+        "Bạn không có quyền thêm đơn giá lưu kho."
+      );
+
+      return;
+    }
+
+    const warehouseId = Number(
+      formData.warehouse_id
+    );
+
+    const price = Number(
+      formData.price_per_container_per_day
+    );
 
     if (
       !Number.isInteger(warehouseId) ||
@@ -151,36 +210,56 @@ function StoragePricingPage() {
       !Number.isFinite(price) ||
       price < 0
     ) {
-      setError("Đơn giá lưu kho không hợp lệ.");
+      setError(
+        "Đơn giá lưu kho phải lớn hơn hoặc bằng 0."
+      );
+
       return;
     }
 
     if (!formData.effective_from) {
-      setError("Vui lòng chọn ngày hiệu lực.");
+      setError(
+        "Vui lòng chọn ngày hiệu lực."
+      );
+
       return;
     }
 
     try {
       setSaving(true);
-      setError("");
 
-      await createStoragePricing({
+      const result = await createStoragePricing({
         warehouse_id: warehouseId,
-        price_per_container_per_day: price,
-        effective_from: formData.effective_from,
+
+        price_per_container_per_day:
+          price,
+
+        effective_from:
+          formData.effective_from,
+
         status: formData.status,
       });
+
+      setSuccessMessage(
+        result?.message ||
+          "Thêm đơn giá lưu kho thành công."
+      );
 
       setFormData({
         warehouse_id: "",
         price_per_container_per_day: "",
-        effective_from: new Date().toISOString().slice(0, 10),
+        effective_from: getTodayInputValue(),
         status: "active",
       });
 
-      await loadPricing(buildFilterParams());
+      await loadPricing(
+        buildFilterParams()
+      );
     } catch (err) {
-      console.error("Lỗi tạo đơn giá lưu kho:", err);
+      console.error(
+        "Lỗi tạo đơn giá lưu kho:",
+        err
+      );
 
       setError(
         err.response?.data?.message ||
@@ -193,13 +272,23 @@ function StoragePricingPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Khóa / mở khóa đơn giá
+  | Khóa hoặc mở khóa đơn giá
   |--------------------------------------------------------------------------
   */
 
   async function handleToggleStatus(pricing) {
+    if (!canManageStoragePricing) {
+      setError(
+        "Bạn không có quyền thay đổi trạng thái đơn giá."
+      );
+
+      return;
+    }
+
     const nextStatus =
-      pricing.status === "active" ? "inactive" : "active";
+      pricing.status === "active"
+        ? "inactive"
+        : "active";
 
     const confirmMessage =
       nextStatus === "active"
@@ -211,37 +300,66 @@ function StoragePricingPage() {
     }
 
     try {
+      setActionId(pricing.id);
       setError("");
+      setSuccessMessage("");
 
-      await updateStoragePricingStatus(pricing.id, nextStatus);
+      const result =
+        await updateStoragePricingStatus(
+          pricing.id,
+          nextStatus
+        );
 
-      await loadPricing(buildFilterParams());
+      setSuccessMessage(
+        result?.message ||
+          "Cập nhật trạng thái đơn giá thành công."
+      );
+
+      await loadPricing(
+        buildFilterParams()
+      );
     } catch (err) {
-      console.error("Lỗi cập nhật trạng thái đơn giá:", err);
+      console.error(
+        "Lỗi cập nhật trạng thái đơn giá:",
+        err
+      );
 
       setError(
         err.response?.data?.message ||
           "Không thể cập nhật trạng thái đơn giá."
       );
+    } finally {
+      setActionId(null);
     }
   }
 
   /*
   |--------------------------------------------------------------------------
-  | Format dữ liệu
+  | Định dạng
   |--------------------------------------------------------------------------
   */
 
   function formatCurrency(value) {
-    return Number(value || 0).toLocaleString("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    });
+    return Number(value || 0).toLocaleString(
+      "vi-VN",
+      {
+        style: "currency",
+        currency: "VND",
+      }
+    );
   }
 
   function formatDate(value) {
     if (!value) {
       return "Không có";
+    }
+
+    const matchedDate = String(value).match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+    if (matchedDate) {
+      return `${matchedDate[3]}/${matchedDate[2]}/${matchedDate[1]}`;
     }
 
     const date = new Date(value);
@@ -269,17 +387,32 @@ function StoragePricingPage() {
     );
   }
 
+  const tableColumnCount =
+    canManageStoragePricing ? 7 : 6;
+
   return (
     <div>
       <div className="mb-4">
         <h1 className="h4 mb-1">
-          Quản lý đơn giá lưu kho
+          {canManageStoragePricing
+            ? "Quản lý đơn giá lưu kho"
+            : "Đơn giá lưu kho"}
         </h1>
 
         <p className="text-muted mb-0">
-          Cấu hình đơn giá lưu kho theo container/ngày cho từng kho.
+          {canManageStoragePricing
+            ? "Cấu hình đơn giá lưu kho theo container/ngày cho từng kho."
+            : "Tra cứu đơn giá lưu kho đang áp dụng cho từng kho."}
         </p>
       </div>
+
+      {currentRole === "STAFF" && (
+        <div className="alert alert-info">
+          Bạn chỉ được xem đơn giá lưu kho,
+          không được thêm, khóa hoặc mở khóa
+          đơn giá.
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger">
@@ -287,149 +420,176 @@ function StoragePricingPage() {
         </div>
       )}
 
-      {/* Form thêm đơn giá */}
-      <div className="card border-0 shadow-sm mb-4">
-        <div className="card-body">
-          <h5 className="card-title mb-3">
-            Thêm đơn giá lưu kho
-          </h5>
-
-          <form onSubmit={handleSubmit}>
-            <div className="row g-3 align-items-end">
-              <div className="col-md-4">
-                <label
-                  className="form-label"
-                  htmlFor="pricing-warehouse"
-                >
-                  Kho
-                </label>
-
-                <select
-                  id="pricing-warehouse"
-                  name="warehouse_id"
-                  className="form-select"
-                  value={formData.warehouse_id}
-                  disabled={loadingWarehouses || saving}
-                  onChange={handleFormChange}
-                >
-                  <option value="">
-                    {loadingWarehouses ? "Đang tải kho..." : "Chọn kho"}
-                  </option>
-
-                  {warehouses.map((warehouse) => (
-                    <option
-                      key={warehouse.id}
-                      value={warehouse.id}
-                    >
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-md-3">
-                <label
-                  className="form-label"
-                  htmlFor="pricing-price"
-                >
-                  Đơn giá
-                </label>
-
-                <div className="input-group">
-                  <input
-                    id="pricing-price"
-                    name="price_per_container_per_day"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    className="form-control"
-                    value={formData.price_per_container_per_day}
-                    disabled={saving}
-                    onChange={handleFormChange}
-                    placeholder="100000"
-                  />
-
-                  <span className="input-group-text">
-                    VNĐ
-                  </span>
-                </div>
-
-                <div className="form-text">
-                  Giá / container / ngày
-                </div>
-              </div>
-
-              <div className="col-md-3">
-                <label
-                  className="form-label"
-                  htmlFor="pricing-effective-from"
-                >
-                  Ngày hiệu lực
-                </label>
-
-                <input
-                  id="pricing-effective-from"
-                  name="effective_from"
-                  type="date"
-                  className="form-control"
-                  value={formData.effective_from}
-                  disabled={saving}
-                  onChange={handleFormChange}
-                />
-              </div>
-
-              <div className="col-md-2">
-                <label
-                  className="form-label"
-                  htmlFor="pricing-status"
-                >
-                  Trạng thái
-                </label>
-
-                <select
-                  id="pricing-status"
-                  name="status"
-                  className="form-select"
-                  value={formData.status}
-                  disabled={saving}
-                  onChange={handleFormChange}
-                >
-                  <option value="active">
-                    Đang áp dụng
-                  </option>
-
-                  <option value="inactive">
-                    Đã khóa
-                  </option>
-                </select>
-              </div>
-
-              <div className="col-md-12">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <span
-                        className="spinner-border spinner-border-sm me-2"
-                        role="status"
-                      />
-                      Đang lưu...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-save me-2" />
-                      Lưu đơn giá
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
+      {successMessage && (
+        <div className="alert alert-success">
+          {successMessage}
         </div>
-      </div>
+      )}
+
+      {/* Form thêm đơn giá */}
+      {canManageStoragePricing && (
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-body">
+            <h5 className="card-title mb-3">
+              Thêm đơn giá lưu kho
+            </h5>
+
+            <form onSubmit={handleSubmit}>
+              <div className="row g-3 align-items-end">
+                <div className="col-md-4">
+                  <label
+                    className="form-label"
+                    htmlFor="pricing-warehouse"
+                  >
+                    Kho
+                  </label>
+
+                  <select
+                    id="pricing-warehouse"
+                    name="warehouse_id"
+                    className="form-select"
+                    value={
+                      formData.warehouse_id
+                    }
+                    disabled={
+                      loadingWarehouses ||
+                      saving
+                    }
+                    onChange={
+                      handleFormChange
+                    }
+                  >
+                    <option value="">
+                      {loadingWarehouses
+                        ? "Đang tải kho..."
+                        : "Chọn kho"}
+                    </option>
+
+                    {warehouses.map(
+                      (warehouse) => (
+                        <option
+                          key={warehouse.id}
+                          value={warehouse.id}
+                        >
+                          {warehouse.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div className="col-md-3">
+                  <label
+                    className="form-label"
+                    htmlFor="pricing-price"
+                  >
+                    Đơn giá
+                  </label>
+
+                  <div className="input-group">
+                    <input
+                      id="pricing-price"
+                      name="price_per_container_per_day"
+                      type="number"
+                      min="0"
+                      step="1000"
+                      className="form-control"
+                      value={
+                        formData
+                          .price_per_container_per_day
+                      }
+                      disabled={saving}
+                      onChange={
+                        handleFormChange
+                      }
+                      placeholder="100000"
+                    />
+
+                    <span className="input-group-text">
+                      VNĐ
+                    </span>
+                  </div>
+
+                  <div className="form-text">
+                    Giá / container / ngày
+                  </div>
+                </div>
+
+                <div className="col-md-3">
+                  <label
+                    className="form-label"
+                    htmlFor="pricing-effective-from"
+                  >
+                    Ngày hiệu lực
+                  </label>
+
+                  <input
+                    id="pricing-effective-from"
+                    name="effective_from"
+                    type="date"
+                    className="form-control"
+                    value={
+                      formData.effective_from
+                    }
+                    disabled={saving}
+                    onChange={
+                      handleFormChange
+                    }
+                  />
+                </div>
+
+                <div className="col-md-2">
+                  <label
+                    className="form-label"
+                    htmlFor="pricing-status"
+                  >
+                    Trạng thái
+                  </label>
+
+                  <select
+                    id="pricing-status"
+                    name="status"
+                    className="form-select"
+                    value={formData.status}
+                    disabled={saving}
+                    onChange={
+                      handleFormChange
+                    }
+                  >
+                    <option value="active">
+                      Đang áp dụng
+                    </option>
+
+                    <option value="inactive">
+                      Đã khóa
+                    </option>
+                  </select>
+                </div>
+
+                <div className="col-12">
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" />
+                        Đang lưu...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-save me-2" />
+                        Lưu đơn giá
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Bộ lọc */}
       <div className="card border-0 shadow-sm mb-4">
@@ -448,22 +608,30 @@ function StoragePricingPage() {
                   id="filter-warehouse"
                   name="warehouse_id"
                   className="form-select"
-                  value={filters.warehouse_id}
-                  disabled={loadingWarehouses}
-                  onChange={handleFilterChange}
+                  value={
+                    filters.warehouse_id
+                  }
+                  disabled={
+                    loadingWarehouses
+                  }
+                  onChange={
+                    handleFilterChange
+                  }
                 >
                   <option value="">
                     Tất cả kho
                   </option>
 
-                  {warehouses.map((warehouse) => (
-                    <option
-                      key={warehouse.id}
-                      value={warehouse.id}
-                    >
-                      {warehouse.name}
-                    </option>
-                  ))}
+                  {warehouses.map(
+                    (warehouse) => (
+                      <option
+                        key={warehouse.id}
+                        value={warehouse.id}
+                      >
+                        {warehouse.name}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
@@ -480,7 +648,9 @@ function StoragePricingPage() {
                   name="status"
                   className="form-select"
                   value={filters.status}
-                  onChange={handleFilterChange}
+                  onChange={
+                    handleFilterChange
+                  }
                 >
                   <option value="">
                     Tất cả
@@ -511,7 +681,10 @@ function StoragePricingPage() {
                     type="button"
                     className="btn btn-outline-secondary"
                     disabled={loading}
-                    onClick={handleResetFilters}
+                    onClick={
+                      handleResetFilters
+                    }
+                    title="Đặt lại bộ lọc"
                   >
                     <i className="bi bi-arrow-counterclockwise" />
                   </button>
@@ -525,9 +698,15 @@ function StoragePricingPage() {
       {/* Danh sách đơn giá */}
       <div className="card border-0 shadow-sm">
         <div className="card-body">
-          <h5 className="card-title mb-3">
-            Danh sách đơn giá lưu kho
-          </h5>
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 className="card-title mb-0">
+              Danh sách đơn giá lưu kho
+            </h5>
+
+            <span className="badge bg-secondary">
+              {pricingList.length} đơn giá
+            </span>
+          </div>
 
           <div className="table-responsive">
             <table className="table align-middle">
@@ -539,7 +718,10 @@ function StoragePricingPage() {
                   <th>Ngày hiệu lực</th>
                   <th>Trạng thái</th>
                   <th>Ngày tạo</th>
-                  <th>Thao tác</th>
+
+                  {canManageStoragePricing && (
+                    <th>Thao tác</th>
+                  )}
                 </tr>
               </thead>
 
@@ -547,79 +729,106 @@ function StoragePricingPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="7"
+                      colSpan={
+                        tableColumnCount
+                      }
                       className="text-center text-muted py-5"
                     >
-                      <span
-                        className="spinner-border spinner-border-sm me-2"
-                        role="status"
-                      />
+                      <span className="spinner-border spinner-border-sm me-2" />
                       Đang tải đơn giá lưu kho...
                     </td>
                   </tr>
-                ) : pricingList.length === 0 ? (
+                ) : pricingList.length ===
+                  0 ? (
                   <tr>
                     <td
-                      colSpan="7"
+                      colSpan={
+                        tableColumnCount
+                      }
                       className="text-center text-muted py-5"
                     >
-                      Chưa có đơn giá lưu kho phù hợp.
+                      Chưa có đơn giá lưu kho
+                      phù hợp.
                     </td>
                   </tr>
                 ) : (
-                  pricingList.map((pricing, index) => (
-                    <tr key={pricing.id}>
-                      <td>
-                        {index + 1}
-                      </td>
+                  pricingList.map(
+                    (pricing, index) => (
+                      <tr key={pricing.id}>
+                        <td>{index + 1}</td>
 
-                      <td>
-                        <strong>
-                          {pricing.warehouse_name}
-                        </strong>
-                      </td>
+                        <td>
+                          <strong>
+                            {
+                              pricing.warehouse_name
+                            }
+                          </strong>
+                        </td>
 
-                      <td>
-                        <strong className="text-primary">
-                          {formatCurrency(
-                            pricing.price_per_container_per_day
+                        <td>
+                          <strong className="text-primary">
+                            {formatCurrency(
+                              pricing
+                                .price_per_container_per_day
+                            )}
+                          </strong>
+
+                          <div className="text-muted small">
+                            / container / ngày
+                          </div>
+                        </td>
+
+                        <td>
+                          {formatDate(
+                            pricing.effective_from
                           )}
-                        </strong>
+                        </td>
 
-                        <div className="text-muted small">
-                          / container / ngày
-                        </div>
-                      </td>
+                        <td>
+                          {getStatusBadge(
+                            pricing.status
+                          )}
+                        </td>
 
-                      <td>
-                        {formatDate(pricing.effective_from)}
-                      </td>
+                        <td>
+                          {formatDate(
+                            pricing.created_at
+                          )}
+                        </td>
 
-                      <td>
-                        {getStatusBadge(pricing.status)}
-                      </td>
-
-                      <td>
-                        {formatDate(pricing.created_at)}
-                      </td>
-
-                      <td>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${
-                            pricing.status === "active"
-                              ? "btn-outline-danger"
-                              : "btn-outline-success"
-                          }`}
-                          onClick={() => handleToggleStatus(pricing)}
-                        >
-                          {pricing.status === "active"
-                            ? "Khóa"
-                            : "Mở khóa"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        {canManageStoragePricing && (
+                          <td>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${
+                                pricing.status ===
+                                "active"
+                                  ? "btn-outline-danger"
+                                  : "btn-outline-success"
+                              }`}
+                              disabled={
+                                actionId ===
+                                pricing.id
+                              }
+                              onClick={() =>
+                                handleToggleStatus(
+                                  pricing
+                                )
+                              }
+                            >
+                              {actionId ===
+                              pricing.id
+                                ? "Đang xử lý..."
+                                : pricing.status ===
+                                    "active"
+                                  ? "Khóa"
+                                  : "Mở khóa"}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  )
                 )}
               </tbody>
             </table>
@@ -627,7 +836,9 @@ function StoragePricingPage() {
 
           <div className="alert alert-info mb-0 mt-3">
             <strong>Ghi chú:</strong>{" "}
-            Khi xuất kho, hệ thống lấy đơn giá đang áp dụng có ngày hiệu lực gần nhất nhưng không lớn hơn ngày xuất.
+            Khi xuất kho, hệ thống sử dụng đơn
+            giá có ngày hiệu lực gần nhất nhưng
+            không lớn hơn ngày xuất.
           </div>
         </div>
       </div>

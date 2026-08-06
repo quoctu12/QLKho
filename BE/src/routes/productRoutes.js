@@ -23,6 +23,9 @@ const router = express.Router();
 |--------------------------------------------------------------------------
 | Lấy danh sách sản phẩm
 |--------------------------------------------------------------------------
+|
+| ADMIN, MANAGER và STAFF đều được xem.
+|
 */
 
 router.get(
@@ -40,6 +43,9 @@ router.get(
 |--------------------------------------------------------------------------
 | Lấy chi tiết sản phẩm
 |--------------------------------------------------------------------------
+|
+| ADMIN, MANAGER và STAFF đều được xem.
+|
 */
 
 router.get(
@@ -58,6 +64,9 @@ router.get(
 | Tạo sản phẩm
 |--------------------------------------------------------------------------
 |
+| STAFF được thêm nhanh sản phẩm mới để tiếp tục lập phiếu nhập.
+| STAFF không được sửa hoặc ngừng hoạt động sản phẩm.
+|
 | Tên field ảnh phía frontend:
 | requestData.append("image", selectedImage)
 |
@@ -68,7 +77,8 @@ router.post(
   authenticate,
   authorize(
     "ADMIN",
-    "MANAGER"
+    "MANAGER",
+    "STAFF"
   ),
   uploadProductImage.single("image"),
   createProduct
@@ -78,6 +88,9 @@ router.post(
 |--------------------------------------------------------------------------
 | Cập nhật sản phẩm
 |--------------------------------------------------------------------------
+|
+| Chỉ ADMIN và MANAGER được sửa.
+|
 */
 
 router.put(
@@ -95,12 +108,19 @@ router.put(
 |--------------------------------------------------------------------------
 | Ngừng hoạt động sản phẩm
 |--------------------------------------------------------------------------
+|
+| ADMIN và MANAGER được ngừng hoạt động.
+| STAFF không được thực hiện.
+|
 */
 
 router.patch(
   "/:id/deactivate",
   authenticate,
-  authorize("ADMIN"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   deactivateProduct
 );
 

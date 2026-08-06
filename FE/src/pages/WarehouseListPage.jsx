@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   getWarehouses,
   createWarehouse,
@@ -6,7 +7,20 @@ import {
   deleteWarehouse,
 } from "../api/warehouseApi";
 
+import { useAuth } from "../contexts/AuthContext";
+
 function WarehouseListPage() {
+  const { user } = useAuth();
+
+  const currentRole = String(
+    user?.role || ""
+  ).toUpperCase();
+
+  const canManageWarehouse = [
+    "ADMIN",
+    "MANAGER",
+  ].includes(currentRole);
+
   const [warehouses, setWarehouses] = useState([]);
 
   const [formData, setFormData] = useState({
@@ -27,11 +41,22 @@ function WarehouseListPage() {
   async function loadWarehouses() {
     try {
       setLoading(true);
+      setError("");
+
       const data = await getWarehouses();
-      setWarehouses(data);
+
+      setWarehouses(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
       console.error("Lỗi tải kho:", err);
-      setError("Không thể tải danh sách kho.");
+
+      setWarehouses([]);
+
+      setError(
+        err.response?.data?.message ||
+          "Không thể tải danh sách kho."
+      );
     } finally {
       setLoading(false);
     }
@@ -40,13 +65,28 @@ function WarehouseListPage() {
   function handleChange(event) {
     const { name, value } = event.target;
 
-    setFormData((prev) => ({
-      ...prev,
+    setFormData((previous) => ({
+      ...previous,
       [name]: value,
     }));
   }
 
+  function resetForm() {
+    setEditingId(null);
+
+    setFormData({
+      name: "",
+      address: "",
+      description: "",
+    });
+  }
+
   function handleEdit(warehouse) {
+    if (!canManageWarehouse) {
+      alert("Bạn không có quyền sửa kho.");
+      return;
+    }
+
     setEditingId(warehouse.id);
 
     setFormData({
@@ -59,20 +99,20 @@ function WarehouseListPage() {
   }
 
   function handleCancelEdit() {
-    setEditingId(null);
-
-    setFormData({
-      name: "",
-      address: "",
-      description: "",
-    });
-
+    resetForm();
     setError("");
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+
+    if (!canManageWarehouse) {
+      setError(
+        "Bạn không có quyền thêm hoặc cập nhật kho."
+      );
+      return;
+    }
 
     if (!formData.name.trim()) {
       setError("Vui lòng nhập tên kho.");
@@ -96,14 +136,7 @@ function WarehouseListPage() {
         alert("Thêm kho thành công.");
       }
 
-      setEditingId(null);
-
-      setFormData({
-        name: "",
-        address: "",
-        description: "",
-      });
-
+      resetForm();
       await loadWarehouses();
     } catch (err) {
       console.error("Lỗi lưu kho:", err);
@@ -118,21 +151,34 @@ function WarehouseListPage() {
   }
 
   async function handleDelete(warehouse) {
+    if (!canManageWarehouse) {
+      alert("Bạn không có quyền xóa kho.");
+      return;
+    }
+
     const confirmed = window.confirm(
       `Bạn có chắc muốn xóa kho "${warehouse.name}" không?`
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
-      const result = await deleteWarehouse(warehouse.id);
+      const result = await deleteWarehouse(
+        warehouse.id
+      );
 
-      alert(result.message);
-      await loadWarehouses();
+      alert(
+        result?.message ||
+          "Xóa kho thành công."
+      );
 
       if (editingId === warehouse.id) {
-        handleCancelEdit();
+        resetForm();
       }
+
+      await loadWarehouses();
     } catch (err) {
       console.error("Lỗi xóa kho:", err);
 
@@ -146,11 +192,25 @@ function WarehouseListPage() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="h4 mb-1">Quản lý kho</h1>
+        <h1 className="h4 mb-1">
+          {canManageWarehouse
+            ? "Quản lý kho"
+            : "Danh sách kho"}
+        </h1>
+
         <p className="text-muted mb-0">
-          Quản lý thông tin các kho trong hệ thống.
+          {canManageWarehouse
+            ? "Quản lý thông tin các kho trong hệ thống."
+            : "Xem thông tin các kho phục vụ nghiệp vụ nhập xuất."}
         </p>
       </div>
+
+      {currentRole === "STAFF" && (
+        <div className="alert alert-info">
+          Bạn chỉ được xem danh sách kho, không được
+          thêm, sửa hoặc xóa kho.
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger">
@@ -159,96 +219,130 @@ function WarehouseListPage() {
       )}
 
       <div className="row g-4">
-        <div className="col-lg-4">
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <h5 className="card-title mb-3">
-                {editingId ? "Sửa kho" : "Thêm kho"}
-              </h5>
+        {canManageWarehouse && (
+          <div className="col-lg-4">
+            <div className="card border-0 shadow-sm">
+              <div className="card-body">
+                <h5 className="card-title mb-3">
+                  {editingId ? "Sửa kho" : "Thêm kho"}
+                </h5>
 
-              <form onSubmit={handleSubmit}>
-                <div className="mb-3">
-                  <label className="form-label">
-                    Tên kho
-                  </label>
-
-                  <input
-                    type="text"
-                    name="name"
-                    className="form-control"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="Ví dụ: Kho trung tâm"
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Địa chỉ
-                  </label>
-
-                  <textarea
-                    name="address"
-                    className="form-control"
-                    rows="3"
-                    value={formData.address}
-                    onChange={handleChange}
-                    placeholder="Nhập địa chỉ kho"
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">
-                    Mô tả
-                  </label>
-
-                  <textarea
-                    name="description"
-                    className="form-control"
-                    rows="3"
-                    value={formData.description}
-                    onChange={handleChange}
-                    placeholder="Nhập mô tả kho"
-                  />
-                </div>
-
-                <div className="d-flex gap-2">
-                  <button
-                    type="submit"
-                    className="btn btn-primary flex-grow-1"
-                    disabled={saving}
-                  >
-                    {saving
-                      ? "Đang lưu..."
-                      : editingId
-                      ? "Cập nhật kho"
-                      : "Thêm kho"}
-                  </button>
-
-                  {editingId && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handleCancelEdit}
+                <form onSubmit={handleSubmit}>
+                  <div className="mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor="warehouse-name"
                     >
-                      Hủy
+                      Tên kho{" "}
+                      <span className="text-danger">*</span>
+                    </label>
+
+                    <input
+                      id="warehouse-name"
+                      type="text"
+                      name="name"
+                      className="form-control"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="Ví dụ: Kho trung tâm"
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor="warehouse-address"
+                    >
+                      Địa chỉ
+                    </label>
+
+                    <textarea
+                      id="warehouse-address"
+                      name="address"
+                      className="form-control"
+                      rows="3"
+                      value={formData.address}
+                      onChange={handleChange}
+                      placeholder="Nhập địa chỉ kho"
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor="warehouse-description"
+                    >
+                      Mô tả
+                    </label>
+
+                    <textarea
+                      id="warehouse-description"
+                      name="description"
+                      className="form-control"
+                      rows="3"
+                      value={formData.description}
+                      onChange={handleChange}
+                      placeholder="Nhập mô tả kho"
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="d-flex gap-2">
+                    <button
+                      type="submit"
+                      className="btn btn-primary flex-grow-1"
+                      disabled={saving}
+                    >
+                      {saving
+                        ? "Đang lưu..."
+                        : editingId
+                          ? "Cập nhật kho"
+                          : "Thêm kho"}
                     </button>
-                  )}
-                </div>
-              </form>
+
+                    {editingId && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={handleCancelEdit}
+                        disabled={saving}
+                      >
+                        Hủy
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="col-lg-8">
+        <div
+          className={
+            canManageWarehouse
+              ? "col-lg-8"
+              : "col-lg-12"
+          }
+        >
           <div className="card border-0 shadow-sm">
             <div className="card-body">
-              <h5 className="card-title mb-3">
-                Danh sách kho
-              </h5>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5 className="card-title mb-0">
+                  Danh sách kho
+                </h5>
+
+                <span className="badge bg-secondary">
+                  {warehouses.length} kho
+                </span>
+              </div>
 
               {loading ? (
-                <p>Đang tải dữ liệu...</p>
+                <div className="text-center text-muted py-5">
+                  <span className="spinner-border spinner-border-sm me-2" />
+                  Đang tải dữ liệu...
+                </div>
               ) : (
                 <div className="table-responsive">
                   <table className="table align-middle">
@@ -258,7 +352,10 @@ function WarehouseListPage() {
                         <th>Tên kho</th>
                         <th>Địa chỉ</th>
                         <th>Mô tả</th>
-                        <th>Thao tác</th>
+
+                        {canManageWarehouse && (
+                          <th>Thao tác</th>
+                        )}
                       </tr>
                     </thead>
 
@@ -266,8 +363,10 @@ function WarehouseListPage() {
                       {warehouses.length === 0 ? (
                         <tr>
                           <td
-                            colSpan="5"
-                            className="text-center text-muted"
+                            colSpan={
+                              canManageWarehouse ? 5 : 4
+                            }
+                            className="text-center text-muted py-4"
                           >
                             Chưa có kho.
                           </td>
@@ -291,29 +390,31 @@ function WarehouseListPage() {
                                 "Không có mô tả"}
                             </td>
 
-                            <td className="text-nowrap">
-                              <div className="d-flex gap-2 flex-nowrap">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-warning"
-                                  onClick={() =>
-                                    handleEdit(warehouse)
-                                  }
-                                >
-                                  Sửa
-                                </button>
+                            {canManageWarehouse && (
+                              <td className="text-nowrap">
+                                <div className="d-flex gap-2 flex-nowrap">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-warning"
+                                    onClick={() =>
+                                      handleEdit(warehouse)
+                                    }
+                                  >
+                                    Sửa
+                                  </button>
 
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() =>
-                                    handleDelete(warehouse)
-                                  }
-                                >
-                                  Xóa
-                                </button>
-                              </div>
-                            </td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={() =>
+                                      handleDelete(warehouse)
+                                    }
+                                  >
+                                    Xóa
+                                  </button>
+                                </div>
+                              </td>
+                            )}
                           </tr>
                         ))
                       )}

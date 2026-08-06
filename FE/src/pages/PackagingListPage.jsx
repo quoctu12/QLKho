@@ -19,12 +19,14 @@ function PackagingListPage() {
     product_id: "",
     unit_id: "",
     quantity_per_unit: "",
+    units_per_container: "",
     note: "",
   });
 
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
 
   /*
@@ -41,15 +43,6 @@ function PackagingListPage() {
   |--------------------------------------------------------------------------
   | Tải danh sách quy cách, sản phẩm và đơn vị tính
   |--------------------------------------------------------------------------
-  |
-  | API sản phẩm hiện trả về:
-  | {
-  |   products: [],
-  |   pagination: {}
-  | }
-  |
-  | Vì vậy phải lấy productData.products thay vì gán cả object.
-  |
   */
 
   async function loadData() {
@@ -57,7 +50,11 @@ function PackagingListPage() {
       setLoading(true);
       setError("");
 
-      const [packagingData, productData, unitData] = await Promise.all([
+      const [
+        packagingData,
+        productData,
+        unitData,
+      ] = await Promise.all([
         getPackaging(),
 
         getProducts({
@@ -71,7 +68,9 @@ function PackagingListPage() {
       ]);
 
       setPackagingList(
-        Array.isArray(packagingData) ? packagingData : []
+        Array.isArray(packagingData)
+          ? packagingData
+          : []
       );
 
       setProducts(
@@ -81,10 +80,15 @@ function PackagingListPage() {
       );
 
       setUnits(
-        Array.isArray(unitData) ? unitData : []
+        Array.isArray(unitData)
+          ? unitData
+          : []
       );
     } catch (err) {
-      console.error("Lỗi tải dữ liệu quy cách đóng gói:", err);
+      console.error(
+        "Lỗi tải dữ liệu quy cách đóng gói:",
+        err
+      );
 
       setPackagingList([]);
       setProducts([]);
@@ -97,6 +101,24 @@ function PackagingListPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Đặt lại form
+  |--------------------------------------------------------------------------
+  */
+
+  function resetForm() {
+    setEditingId(null);
+
+    setFormData({
+      product_id: "",
+      unit_id: "",
+      quantity_per_unit: "",
+      units_per_container: "",
+      note: "",
+    });
   }
 
   /*
@@ -126,11 +148,21 @@ function PackagingListPage() {
     setFormData({
       product_id: String(item.product_id),
       unit_id: String(item.unit_id),
-      quantity_per_unit: String(item.quantity_per_unit),
+      quantity_per_unit: String(
+        item.quantity_per_unit ?? ""
+      ),
+      units_per_container: String(
+        item.units_per_container ?? ""
+      ),
       note: item.note || "",
     });
 
     setError("");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   /*
@@ -140,15 +172,7 @@ function PackagingListPage() {
   */
 
   function handleCancelEdit() {
-    setEditingId(null);
-
-    setFormData({
-      product_id: "",
-      unit_id: "",
-      quantity_per_unit: "",
-      note: "",
-    });
-
+    resetForm();
     setError("");
   }
 
@@ -165,22 +189,53 @@ function PackagingListPage() {
     if (
       !formData.product_id ||
       !formData.unit_id ||
-      !formData.quantity_per_unit
+      !formData.quantity_per_unit ||
+      !formData.units_per_container
     ) {
       setError(
-        "Vui lòng chọn sản phẩm, đơn vị tính và nhập số lượng quy đổi."
+        "Vui lòng chọn sản phẩm, đơn vị tính, nhập số lượng quy đổi và sức chứa container."
       );
 
       return;
     }
 
-    const quantityPerUnit = Number(formData.quantity_per_unit);
+    const quantityPerUnit = Number(
+      formData.quantity_per_unit
+    );
+
+    const unitsPerContainer = Number(
+      formData.units_per_container
+    );
 
     if (
-      !Number.isFinite(quantityPerUnit) ||
+      !Number.isInteger(quantityPerUnit) ||
       quantityPerUnit <= 0
     ) {
-      setError("Số lượng quy đổi phải lớn hơn 0.");
+      setError(
+        "Số lượng quy đổi phải là số nguyên lớn hơn 0."
+      );
+
+      return;
+    }
+
+    if (
+      !Number.isInteger(unitsPerContainer) ||
+      unitsPerContainer <= 0
+    ) {
+      setError(
+        "Số đơn vị trên một container phải là số nguyên lớn hơn 0."
+      );
+
+      return;
+    }
+
+    const note = formData.note.trim();
+
+    if (note.length > 255) {
+      setError(
+        "Ghi chú không được vượt quá 255 ký tự."
+      );
+
       return;
     }
 
@@ -188,34 +243,41 @@ function PackagingListPage() {
       product_id: Number(formData.product_id),
       unit_id: Number(formData.unit_id),
       quantity_per_unit: quantityPerUnit,
-      note: formData.note.trim(),
+      units_per_container: unitsPerContainer,
+      note,
     };
 
     try {
       setSaving(true);
 
       if (editingId) {
-        await updatePackaging(editingId, payload);
+        const result = await updatePackaging(
+          editingId,
+          payload
+        );
 
-        alert("Cập nhật quy cách đóng gói thành công.");
+        alert(
+          result?.message ||
+            "Cập nhật quy cách đóng gói thành công."
+        );
       } else {
-        await createPackaging(payload);
+        const result = await createPackaging(
+          payload
+        );
 
-        alert("Thêm quy cách đóng gói thành công.");
+        alert(
+          result?.message ||
+            "Thêm quy cách đóng gói thành công."
+        );
       }
 
-      setEditingId(null);
-
-      setFormData({
-        product_id: "",
-        unit_id: "",
-        quantity_per_unit: "",
-        note: "",
-      });
-
+      resetForm();
       await loadData();
     } catch (err) {
-      console.error("Lỗi lưu quy cách đóng gói:", err);
+      console.error(
+        "Lỗi lưu quy cách đóng gói:",
+        err
+      );
 
       setError(
         err.response?.data?.message ||
@@ -242,35 +304,58 @@ function PackagingListPage() {
     }
 
     try {
-      const result = await deletePackaging(item.id);
+      setDeletingId(item.id);
+
+      const result = await deletePackaging(
+        item.id
+      );
 
       alert(
-        result.message ||
+        result?.message ||
           "Xóa quy cách đóng gói thành công."
       );
 
       if (editingId === item.id) {
-        handleCancelEdit();
+        resetForm();
       }
 
       await loadData();
     } catch (err) {
-      console.error("Lỗi xóa quy cách:", err);
+      console.error(
+        "Lỗi xóa quy cách:",
+        err
+      );
 
       alert(
         err.response?.data?.message ||
           "Không thể xóa quy cách đóng gói."
       );
+    } finally {
+      setDeletingId(null);
     }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Định dạng số
+  |--------------------------------------------------------------------------
+  */
+
+  function formatNumber(value) {
+    return Number(value || 0).toLocaleString(
+      "vi-VN"
+    );
   }
 
   return (
     <div>
       <div className="mb-4">
-        <h1 className="h4 mb-1">Quy cách đóng gói</h1>
+        <h1 className="h4 mb-1">
+          Quy cách đóng gói
+        </h1>
 
         <p className="text-muted mb-0">
-          Cấu hình số lượng quy đổi theo từng đơn vị sản phẩm.
+          Cấu hình số lượng quy đổi và sức chứa container theo từng đơn vị sản phẩm.
         </p>
       </div>
 
@@ -286,7 +371,9 @@ function PackagingListPage() {
           <div className="card border-0 shadow-sm">
             <div className="card-body">
               <h5 className="card-title mb-3">
-                {editingId ? "Sửa quy cách" : "Thêm quy cách"}
+                {editingId
+                  ? "Sửa quy cách"
+                  : "Thêm quy cách"}
               </h5>
 
               <form onSubmit={handleSubmit}>
@@ -317,7 +404,8 @@ function PackagingListPage() {
                         key={product.id}
                         value={product.id}
                       >
-                        {product.sku} - {product.name}
+                        {product.sku} -{" "}
+                        {product.name}
                       </option>
                     ))}
                   </select>
@@ -371,11 +459,45 @@ function PackagingListPage() {
                     step="1"
                     name="quantity_per_unit"
                     className="form-control"
-                    value={formData.quantity_per_unit}
+                    value={
+                      formData.quantity_per_unit
+                    }
                     onChange={handleChange}
-                    placeholder="Ví dụ: 24"
+                    placeholder="Ví dụ: 30"
                     disabled={saving}
                   />
+
+                  <div className="form-text">
+                    Ví dụ: một thùng có 30 sản phẩm cơ sở.
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label
+                    className="form-label"
+                    htmlFor="units-per-container"
+                  >
+                    Số đơn vị trên một container
+                  </label>
+
+                  <input
+                    id="units-per-container"
+                    type="number"
+                    min="1"
+                    step="1"
+                    name="units_per_container"
+                    className="form-control"
+                    value={
+                      formData.units_per_container
+                    }
+                    onChange={handleChange}
+                    placeholder="Ví dụ: 50"
+                    disabled={saving}
+                  />
+
+                  <div className="form-text">
+                    Ví dụ: một container chứa tối đa 50 thùng.
+                  </div>
                 </div>
 
                 <div className="mb-3">
@@ -391,11 +513,21 @@ function PackagingListPage() {
                     name="note"
                     className="form-control"
                     rows="3"
+                    maxLength={255}
                     value={formData.note}
                     onChange={handleChange}
-                    placeholder="Ví dụ: 1 thùng gồm 24 chai"
+                    placeholder="Ví dụ: 1 thùng gồm 30 gói"
                     disabled={saving}
                   />
+
+                  <div className="form-text text-end">
+                    {formData.note.length}/255
+                  </div>
+                </div>
+
+                <div className="alert alert-info small">
+                  <strong>Công thức:</strong>{" "}
+                  số container bằng số lượng nhập chia cho số đơn vị trên một container, sau đó làm tròn lên.
                 </div>
 
                 <div className="d-flex gap-2">
@@ -410,6 +542,7 @@ function PackagingListPage() {
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
                         />
+
                         Đang lưu...
                       </>
                     ) : editingId ? (
@@ -423,7 +556,9 @@ function PackagingListPage() {
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      onClick={handleCancelEdit}
+                      onClick={
+                        handleCancelEdit
+                      }
                       disabled={saving}
                     >
                       Hủy
@@ -461,70 +596,127 @@ function PackagingListPage() {
                         <th>Sản phẩm</th>
                         <th>Đơn vị</th>
                         <th>Số lượng quy đổi</th>
+                        <th>Đơn vị/container</th>
                         <th>Ghi chú</th>
                         <th>Thao tác</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {packagingList.length === 0 ? (
+                      {packagingList.length ===
+                      0 ? (
                         <tr>
                           <td
-                            colSpan="6"
+                            colSpan="7"
                             className="text-center text-muted py-4"
                           >
                             Chưa có quy cách đóng gói.
                           </td>
                         </tr>
                       ) : (
-                        packagingList.map((item) => (
-                          <tr key={item.id}>
-                            <td>{item.id}</td>
+                        packagingList.map(
+                          (item) => (
+                            <tr key={item.id}>
+                              <td>{item.id}</td>
 
-                            <td>
-                              <strong>
-                                {item.product_name}
-                              </strong>
+                              <td>
+                                <strong>
+                                  {
+                                    item.product_name
+                                  }
+                                </strong>
 
-                              <div className="text-muted small">
-                                {item.sku}
-                              </div>
-                            </td>
+                                <div className="text-muted small">
+                                  {item.sku}
+                                </div>
+                              </td>
 
-                            <td>
-                              {item.unit_name}
-                            </td>
+                              <td>
+                                {item.unit_name}
+                              </td>
 
-                            <td>
-                              {item.quantity_per_unit}
-                            </td>
+                              <td>
+                                <strong>
+                                  {formatNumber(
+                                    item.quantity_per_unit
+                                  )}
+                                </strong>
 
-                            <td>
-                              {item.note ||
-                                "Không có ghi chú"}
-                            </td>
+                                <div className="small text-muted">
+                                  đơn vị cơ sở
+                                </div>
+                              </td>
 
-                            <td className="text-nowrap">
-                              <div className="d-flex gap-2 flex-nowrap">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-warning"
-                                  onClick={() => handleEdit(item)}
-                                >
-                                  Sửa
-                                </button>
+                              <td>
+                                <strong className="text-primary">
+                                  {formatNumber(
+                                    item.units_per_container
+                                  )}
+                                </strong>
 
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => handleDelete(item)}
-                                >
-                                  Xóa
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                                <div className="small text-muted">
+                                  {item.unit_name}
+                                  /container
+                                </div>
+                              </td>
+
+                              <td>
+                                {item.note ||
+                                  "Không có ghi chú"}
+                              </td>
+
+                              <td className="text-nowrap">
+                                <div className="d-flex gap-2 flex-nowrap">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-warning"
+                                    onClick={() =>
+                                      handleEdit(
+                                        item
+                                      )
+                                    }
+                                    disabled={
+                                      saving ||
+                                      deletingId !==
+                                        null
+                                    }
+                                  >
+                                    Sửa
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={() =>
+                                      handleDelete(
+                                        item
+                                      )
+                                    }
+                                    disabled={
+                                      saving ||
+                                      deletingId !==
+                                        null
+                                    }
+                                  >
+                                    {deletingId ===
+                                    item.id ? (
+                                      <>
+                                        <span
+                                          className="spinner-border spinner-border-sm me-1"
+                                          role="status"
+                                        />
+
+                                        Đang xóa
+                                      </>
+                                    ) : (
+                                      "Xóa"
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        )
                       )}
                     </tbody>
                   </table>

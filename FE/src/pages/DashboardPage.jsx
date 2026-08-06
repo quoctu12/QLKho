@@ -20,9 +20,49 @@ import {
   getInventoryByWarehouse,
 } from "../api/reportApi";
 
-import { getInventoryBatches } from "../api/inventoryApi";
+import {
+  getInventoryBatches,
+  getInventorySummary,
+} from "../api/inventoryApi";
+
 import { getStockIns } from "../api/stockInApi";
 import { getStockOuts } from "../api/stockOutApi";
+
+/*
+|--------------------------------------------------------------------------
+| Chuyển ngày về timestamp chỉ gồm năm, tháng, ngày
+|--------------------------------------------------------------------------
+*/
+
+function toDateOnlyTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  const matchedDate = String(value).match(
+    /^(\d{4})-(\d{2})-(\d{2})/
+  );
+
+  if (matchedDate) {
+    return Date.UTC(
+      Number(matchedDate[1]),
+      Number(matchedDate[2]) - 1,
+      Number(matchedDate[3])
+    );
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  );
+}
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -30,29 +70,44 @@ function DashboardPage() {
   const [summary, setSummary] = useState({
     total_products: 0,
     total_warehouses: 0,
+
     total_quantity: 0,
     total_containers: 0,
     total_batches: 0,
     total_products_in_stock: 0,
+
     total_stock_ins: 0,
     total_import_quantity: 0,
     total_import_containers: 0,
+
     total_stock_outs: 0,
     total_export_quantity: 0,
     total_export_containers: 0,
+
+    total_regular_storage_fee: 0,
+    total_overdue_storage_fee: 0,
     total_storage_fee: 0,
+
     expired_batches: 0,
     expiring_batches: 0,
+    low_stock_products: 0,
+
+    storage_warning_batches: 0,
+    overdue_storage_batches: 0,
+    no_storage_policy_batches: 0,
   });
 
   const [movementChart, setMovementChart] = useState([]);
   const [warehouseChart, setWarehouseChart] = useState([]);
 
   const [expiringBatches, setExpiringBatches] = useState([]);
+  const [storageAlertBatches, setStorageAlertBatches] = useState([]);
+
   const [recentStockIns, setRecentStockIns] = useState([]);
   const [recentStockOuts, setRecentStockOuts] = useState([]);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   /*
@@ -65,14 +120,22 @@ function DashboardPage() {
     loadDashboard();
   }, []);
 
-  async function loadDashboard() {
+  async function loadDashboard(isRefresh = false) {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
 
       const [
-        summaryData,
+        dashboardSummaryData,
+        inventorySummaryData,
         expiringData,
+        storageWarningData,
+        storageOverdueData,
         stockInData,
         stockOutData,
         movementData,
@@ -80,40 +143,229 @@ function DashboardPage() {
       ] = await Promise.all([
         getDashboardSummary(),
 
+        getInventorySummary(),
+
         getInventoryBatches({
+          page: 1,
+          limit: 5,
           expiry_status: "expiring",
+          sort_by: "expiry_asc",
         }),
 
-        getStockIns(),
-        getStockOuts(),
+        getInventoryBatches({
+          page: 1,
+          limit: 5,
+          storage_status: "warning",
+          sort_by: "storage_due_asc",
+        }),
+
+        getInventoryBatches({
+          page: 1,
+          limit: 5,
+          storage_status: "overdue",
+          sort_by: "storage_due_asc",
+        }),
+
+        getStockIns({
+          page: 1,
+          limit: 5,
+          sort_by: "newest",
+        }),
+
+        getStockOuts({
+          page: 1,
+          limit: 5,
+          sort_by: "newest",
+        }),
+
         getStockMovementReport(),
+
         getInventoryByWarehouse(),
       ]);
 
+      /*
+      |--------------------------------------------------------------------------
+      | Tổng phí lưu kho
+      |--------------------------------------------------------------------------
+      */
+
+      const totalStorageFee = Number(
+        dashboardSummaryData?.total_storage_fee ??
+          dashboardSummaryData?.total_amount ??
+          0
+      );
+
+      const hasStorageFeeSplit =
+        dashboardSummaryData?.total_regular_storage_fee !== undefined ||
+        dashboardSummaryData?.total_regular_amount !== undefined ||
+        dashboardSummaryData?.total_overdue_storage_fee !== undefined ||
+        dashboardSummaryData?.total_overdue_amount !== undefined;
+
+      const totalRegularStorageFee = hasStorageFeeSplit
+        ? Number(
+            dashboardSummaryData?.total_regular_storage_fee ??
+              dashboardSummaryData?.total_regular_amount ??
+              0
+          )
+        : totalStorageFee;
+
+      const totalOverdueStorageFee = Number(
+        dashboardSummaryData?.total_overdue_storage_fee ??
+          dashboardSummaryData?.total_overdue_amount ??
+          0
+      );
+
       setSummary({
-        total_products: Number(summaryData?.total_products || 0),
-        total_warehouses: Number(summaryData?.total_warehouses || 0),
-        total_quantity: Number(summaryData?.total_quantity || 0),
-        total_containers: Number(summaryData?.total_containers || 0),
-        total_batches: Number(summaryData?.total_batches || 0),
-        total_products_in_stock: Number(summaryData?.total_products_in_stock || 0),
+        total_products: Number(
+          dashboardSummaryData?.total_products || 0
+        ),
 
-        total_stock_ins: Number(summaryData?.total_stock_ins || 0),
-        total_import_quantity: Number(summaryData?.total_import_quantity || 0),
-        total_import_containers: Number(summaryData?.total_import_containers || 0),
+        total_warehouses: Number(
+          dashboardSummaryData?.total_warehouses || 0
+        ),
 
-        total_stock_outs: Number(summaryData?.total_stock_outs || 0),
-        total_export_quantity: Number(summaryData?.total_export_quantity || 0),
-        total_export_containers: Number(summaryData?.total_export_containers || 0),
-        total_storage_fee: Number(summaryData?.total_storage_fee || 0),
+        total_quantity: Number(
+          inventorySummaryData?.total_quantity ??
+            dashboardSummaryData?.total_quantity ??
+            0
+        ),
 
-        expired_batches: Number(summaryData?.expired_batches || 0),
-        expiring_batches: Number(summaryData?.expiring_batches || 0),
+        total_containers: Number(
+          inventorySummaryData?.total_containers ??
+            dashboardSummaryData?.total_containers ??
+            0
+        ),
+
+        total_batches: Number(
+          inventorySummaryData?.total_batches ??
+            dashboardSummaryData?.total_batches ??
+            0
+        ),
+
+        total_products_in_stock: Number(
+          inventorySummaryData?.total_products ??
+            dashboardSummaryData?.total_products_in_stock ??
+            0
+        ),
+
+        total_stock_ins: Number(
+          dashboardSummaryData?.total_stock_ins || 0
+        ),
+
+        total_import_quantity: Number(
+          dashboardSummaryData?.total_import_quantity || 0
+        ),
+
+        total_import_containers: Number(
+          dashboardSummaryData?.total_import_containers || 0
+        ),
+
+        total_stock_outs: Number(
+          dashboardSummaryData?.total_stock_outs || 0
+        ),
+
+        total_export_quantity: Number(
+          dashboardSummaryData?.total_export_quantity || 0
+        ),
+
+        total_export_containers: Number(
+          dashboardSummaryData?.total_export_containers || 0
+        ),
+
+        total_regular_storage_fee: totalRegularStorageFee,
+
+        total_overdue_storage_fee: totalOverdueStorageFee,
+
+        total_storage_fee: totalStorageFee,
+
+        expired_batches: Number(
+          inventorySummaryData?.expired_batches ??
+            dashboardSummaryData?.expired_batches ??
+            0
+        ),
+
+        expiring_batches: Number(
+          inventorySummaryData?.expiring_batches ??
+            dashboardSummaryData?.expiring_batches ??
+            0
+        ),
+
+        low_stock_products: Number(
+          inventorySummaryData?.low_stock_products ??
+            dashboardSummaryData?.low_stock_products ??
+            0
+        ),
+
+        storage_warning_batches: Number(
+          inventorySummaryData?.storage_warning_batches || 0
+        ),
+
+        overdue_storage_batches: Number(
+          inventorySummaryData?.overdue_storage_batches || 0
+        ),
+
+        no_storage_policy_batches: Number(
+          inventorySummaryData?.no_storage_policy_batches || 0
+        ),
       });
 
-      setExpiringBatches(
-        Array.isArray(expiringData) ? expiringData.slice(0, 5) : []
+      /*
+      |--------------------------------------------------------------------------
+      | Lô sắp hết hạn sử dụng
+      |--------------------------------------------------------------------------
+      */
+
+      const expiringRows = Array.isArray(expiringData?.batches)
+        ? expiringData.batches
+        : Array.isArray(expiringData)
+          ? expiringData
+          : [];
+
+      setExpiringBatches(expiringRows.slice(0, 5));
+
+      /*
+      |--------------------------------------------------------------------------
+      | Lô cảnh báo thời hạn lưu kho
+      |--------------------------------------------------------------------------
+      */
+
+      const storageWarningRows = Array.isArray(
+        storageWarningData?.batches
+      )
+        ? storageWarningData.batches
+        : Array.isArray(storageWarningData)
+          ? storageWarningData
+          : [];
+
+      const storageOverdueRows = Array.isArray(
+        storageOverdueData?.batches
+      )
+        ? storageOverdueData.batches
+        : Array.isArray(storageOverdueData)
+          ? storageOverdueData
+          : [];
+
+      const storageAlertMap = new Map();
+
+      storageOverdueRows.forEach((batch) => {
+        storageAlertMap.set(String(batch.id), batch);
+      });
+
+      storageWarningRows.forEach((batch) => {
+        if (!storageAlertMap.has(String(batch.id))) {
+          storageAlertMap.set(String(batch.id), batch);
+        }
+      });
+
+      setStorageAlertBatches(
+        Array.from(storageAlertMap.values()).slice(0, 5)
       );
+
+      /*
+      |--------------------------------------------------------------------------
+      | Phiếu nhập gần đây
+      |--------------------------------------------------------------------------
+      */
 
       const stockInRows = Array.isArray(stockInData?.stock_ins)
         ? stockInData.stock_ins
@@ -121,14 +373,27 @@ function DashboardPage() {
           ? stockInData
           : [];
 
+      setRecentStockIns(stockInRows.slice(0, 5));
+
+      /*
+      |--------------------------------------------------------------------------
+      | Phiếu xuất gần đây
+      |--------------------------------------------------------------------------
+      */
+
       const stockOutRows = Array.isArray(stockOutData?.stock_outs)
         ? stockOutData.stock_outs
         : Array.isArray(stockOutData)
           ? stockOutData
           : [];
 
-      setRecentStockIns(stockInRows.slice(0, 5));
       setRecentStockOuts(stockOutRows.slice(0, 5));
+
+      /*
+      |--------------------------------------------------------------------------
+      | Biểu đồ nhập và xuất theo ngày
+      |--------------------------------------------------------------------------
+      */
 
       const movementMap = new Map();
 
@@ -141,7 +406,11 @@ function DashboardPage() {
         : [];
 
       stockInMovement.forEach((item) => {
-        const dateKey = String(item.report_date).slice(0, 10);
+        const dateKey = String(item.report_date || "").slice(0, 10);
+
+        if (!dateKey) {
+          return;
+        }
 
         movementMap.set(dateKey, {
           dateKey,
@@ -155,7 +424,11 @@ function DashboardPage() {
       });
 
       stockOutMovement.forEach((item) => {
-        const dateKey = String(item.report_date).slice(0, 10);
+        const dateKey = String(item.report_date || "").slice(0, 10);
+
+        if (!dateKey) {
+          return;
+        }
 
         const existingItem = movementMap.get(dateKey) || {
           dateKey,
@@ -167,28 +440,56 @@ function DashboardPage() {
           storageFee: 0,
         };
 
-        existingItem.exportQuantity = Number(item.total_quantity || 0);
-        existingItem.exportContainers = Number(item.total_containers || 0);
-        existingItem.storageFee = Number(item.total_storage_fee || item.total_amount || 0);
+        existingItem.exportQuantity = Number(
+          item.total_quantity || 0
+        );
+
+        existingItem.exportContainers = Number(
+          item.total_containers || 0
+        );
+
+        existingItem.storageFee = Number(
+          item.total_storage_fee ??
+            item.total_amount ??
+            0
+        );
 
         movementMap.set(dateKey, existingItem);
       });
 
-      const sortedMovementData = Array.from(movementMap.values()).sort(
+      const sortedMovementData = Array.from(
+        movementMap.values()
+      ).sort(
         (firstItem, secondItem) =>
-          new Date(firstItem.dateKey) - new Date(secondItem.dateKey)
+          String(firstItem.dateKey).localeCompare(
+            String(secondItem.dateKey)
+          )
       );
 
       setMovementChart(sortedMovementData);
 
-      const warehouseRows = Array.isArray(warehouseData) ? warehouseData : [];
+      /*
+      |--------------------------------------------------------------------------
+      | Biểu đồ tồn kho theo kho
+      |--------------------------------------------------------------------------
+      */
+
+      const warehouseRows = Array.isArray(warehouseData)
+        ? warehouseData
+        : Array.isArray(warehouseData?.warehouses)
+          ? warehouseData.warehouses
+          : [];
 
       setWarehouseChart(
         warehouseRows.map((item) => ({
-          warehouse: item.warehouse_name,
+          warehouse: item.warehouse_name || "Không xác định",
+
           totalQuantity: Number(item.total_quantity || 0),
+
           totalContainers: Number(item.total_containers || 0),
+
           totalBatches: Number(item.total_batches || 0),
+
           totalProducts: Number(item.total_products || 0),
         }))
       );
@@ -201,12 +502,13 @@ function DashboardPage() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   /*
   |--------------------------------------------------------------------------
-  | Format dữ liệu
+  | Định dạng dữ liệu
   |--------------------------------------------------------------------------
   */
 
@@ -222,27 +524,28 @@ function DashboardPage() {
   }
 
   function formatDate(value) {
-    if (!value) {
+    const timestamp = toDateOnlyTimestamp(value);
+
+    if (timestamp === null) {
       return "Không có";
     }
 
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "Không hợp lệ";
-    }
-
-    return date.toLocaleDateString("vi-VN");
+    return new Date(timestamp).toLocaleDateString("vi-VN", {
+      timeZone: "UTC",
+    });
   }
 
   function formatChartDate(value) {
-    if (!value) {
+    const timestamp = toDateOnlyTimestamp(value);
+
+    if (timestamp === null) {
       return "";
     }
 
-    return new Date(value).toLocaleDateString("vi-VN", {
+    return new Date(timestamp).toLocaleDateString("vi-VN", {
       day: "2-digit",
       month: "2-digit",
+      timeZone: "UTC",
     });
   }
 
@@ -253,10 +556,137 @@ function DashboardPage() {
     });
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | Dữ liệu phí của phiếu xuất
+  |--------------------------------------------------------------------------
+  */
+
+  function getStockOutRegularAmount(item) {
+    if (
+      item.total_regular_amount !== null &&
+      item.total_regular_amount !== undefined
+    ) {
+      return Number(item.total_regular_amount || 0);
+    }
+
+    return Number(item.total_amount || 0);
+  }
+
+  function getStockOutOverdueAmount(item) {
+    return Number(item.total_overdue_amount || 0);
+  }
+
+  function getStockOutTotalAmount(item) {
+    if (
+      item.total_amount !== null &&
+      item.total_amount !== undefined
+    ) {
+      return Number(item.total_amount || 0);
+    }
+
+    return (
+      getStockOutRegularAmount(item) +
+      getStockOutOverdueAmount(item)
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Badge trạng thái thời hạn lưu kho
+  |--------------------------------------------------------------------------
+  */
+
+  function getStorageStatusBadge(batch) {
+    if (batch.storage_status === "overdue") {
+      return (
+        <span className="badge bg-danger">
+          Đã quá hạn lưu
+        </span>
+      );
+    }
+
+    if (batch.storage_status === "warning") {
+      return (
+        <span className="badge bg-warning text-dark">
+          Sắp quá hạn lưu
+        </span>
+      );
+    }
+
+    if (batch.storage_status === "normal") {
+      return (
+        <span className="badge bg-success">
+          Trong thời hạn
+        </span>
+      );
+    }
+
+    return (
+      <span className="badge bg-secondary">
+        Chưa có chính sách
+      </span>
+    );
+  }
+
+  function getStorageRemainingText(batch) {
+    if (batch.storage_status === "overdue") {
+      return (
+        <span className="text-danger fw-semibold">
+          Quá hạn{" "}
+          {formatNumber(batch.overdue_storage_days)} ngày
+        </span>
+      );
+    }
+
+    const daysUntilDue =
+      batch.days_until_storage_due === null ||
+      batch.days_until_storage_due === undefined
+        ? null
+        : Number(batch.days_until_storage_due);
+
+    if (daysUntilDue === null) {
+      return (
+        <span className="text-muted">
+          Chưa xác định
+        </span>
+      );
+    }
+
+    if (daysUntilDue === 0) {
+      return (
+        <span className="text-warning-emphasis fw-semibold">
+          Hết hạn lưu hôm nay
+        </span>
+      );
+    }
+
+    return (
+      <span
+        className={
+          batch.storage_status === "warning"
+            ? "text-warning-emphasis fw-semibold"
+            : "text-success"
+        }
+      >
+        Còn {formatNumber(daysUntilDue)} ngày
+      </span>
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Các thẻ tổng quan
+  |--------------------------------------------------------------------------
+  */
+
   const cards = [
     {
       title: "Sản phẩm hoạt động",
       value: formatNumber(summary.total_products),
+      note: `${formatNumber(
+        summary.total_products_in_stock
+      )} sản phẩm đang còn tồn`,
       icon: "bi-box-seam",
       textClass: "text-primary",
       path: "/products",
@@ -264,6 +694,9 @@ function DashboardPage() {
     {
       title: "Tổng lô còn tồn",
       value: formatNumber(summary.total_batches),
+      note: `${formatNumber(
+        summary.no_storage_policy_batches
+      )} lô chưa có chính sách`,
       icon: "bi-collection",
       textClass: "text-secondary",
       path: "/inventory",
@@ -271,6 +704,7 @@ function DashboardPage() {
     {
       title: "Số lượng tồn kho",
       value: formatNumber(summary.total_quantity),
+      note: "Tổng số lượng vật lý đang lưu",
       icon: "bi-boxes",
       textClass: "text-success",
       path: "/inventory",
@@ -278,79 +712,137 @@ function DashboardPage() {
     {
       title: "Container đang lưu",
       value: `${formatNumber(summary.total_containers)} container`,
+      note: "Container đang chiếm diện tích kho",
       icon: "bi-hdd-rack",
       textClass: "text-info",
       path: "/inventory",
     },
     {
-      title: "Tổng container nhập",
-      value: `${formatNumber(summary.total_import_containers)} container`,
+      title: "Phiếu nhập kho",
+      value: formatNumber(summary.total_stock_ins),
+      note: `${formatNumber(
+        summary.total_import_containers
+      )} container đã nhập`,
       icon: "bi-box-arrow-in-down",
       textClass: "text-primary",
       path: "/stock-ins",
     },
     {
-      title: "Tổng container xuất",
-      value: `${formatNumber(summary.total_export_containers)} container`,
+      title: "Phiếu xuất kho",
+      value: formatNumber(summary.total_stock_outs),
+      note: `${formatNumber(
+        summary.total_export_containers
+      )} container quyết toán`,
       icon: "bi-box-arrow-up",
       textClass: "text-success",
       path: "/stock-outs",
     },
     {
-      title: "Tổng phí lưu kho",
-      value: formatCurrency(summary.total_storage_fee),
-      icon: "bi-cash-coin",
-      textClass: "text-primary",
-      path: "/stock-outs",
+      title: "Sản phẩm tồn thấp",
+      value: formatNumber(summary.low_stock_products),
+      note: "Cần xem xét bổ sung hàng",
+      icon: "bi-graph-down-arrow",
+      textClass:
+        summary.low_stock_products > 0
+          ? "text-danger"
+          : "text-success",
+      path: "/inventory",
     },
     {
-      title: "Lô sắp hết hạn",
+      title: "Lô sắp hết hạn dùng",
       value: formatNumber(summary.expiring_batches),
+      note: "Ưu tiên xử lý theo FEFO",
       icon: "bi-exclamation-triangle",
       textClass: "text-warning",
       path: "/inventory",
     },
     {
-      title: "Lô đã hết hạn",
+      title: "Lô đã hết hạn dùng",
       value: formatNumber(summary.expired_batches),
+      note: "Không được xuất kho bình thường",
       icon: "bi-x-octagon",
       textClass: "text-danger",
       path: "/inventory",
     },
     {
-      title: "Kho đang quản lý",
-      value: formatNumber(summary.total_warehouses),
-      icon: "bi-building",
-      textClass: "text-secondary",
-      path: "/warehouses",
+      title: "Sắp quá hạn lưu kho",
+      value: formatNumber(summary.storage_warning_batches),
+      note: "Đang trong khoảng thời gian cảnh báo",
+      icon: "bi-clock",
+      textClass: "text-warning",
+      path: "/inventory",
+    },
+    {
+      title: "Đã quá hạn lưu kho",
+      value: formatNumber(summary.overdue_storage_batches),
+      note: "Có thể phát sinh phụ phí quá hạn",
+      icon: "bi-clock-history",
+      textClass: "text-danger",
+      path: "/inventory",
+    },
+    {
+      title: "Tổng phí lưu kho",
+      value: formatCurrency(summary.total_storage_fee),
+      note: `Trong hạn: ${formatCurrency(
+        summary.total_regular_storage_fee
+      )} · Quá hạn: ${formatCurrency(
+        summary.total_overdue_storage_fee
+      )}`,
+      icon: "bi-cash-coin",
+      textClass: "text-primary",
+      path: "/stock-outs",
     },
   ];
 
   if (loading) {
-    return <p>Đang tải dữ liệu Dashboard...</p>;
+    return (
+      <div className="d-flex align-items-center gap-2 text-muted">
+        <span
+          className="spinner-border spinner-border-sm"
+          role="status"
+        />
+
+        Đang tải dữ liệu Dashboard...
+      </div>
+    );
   }
 
   return (
     <div>
       {/* Tiêu đề */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
         <div>
           <h1 className="h4 mb-1">
             Tổng quan hệ thống
           </h1>
 
           <p className="text-muted mb-0">
-            Theo dõi nhanh số lượng tồn, container, vị trí lưu trữ và phí lưu kho.
+            Theo dõi tồn kho, container, hạn sử dụng, thời hạn lưu
+            và phí lưu kho.
           </p>
         </div>
 
         <button
           type="button"
           className="btn btn-outline-primary"
-          onClick={loadDashboard}
+          onClick={() => loadDashboard(true)}
+          disabled={refreshing}
         >
-          <i className="bi bi-arrow-clockwise me-2" />
-          Làm mới
+          {refreshing ? (
+            <>
+              <span
+                className="spinner-border spinner-border-sm me-2"
+                role="status"
+              />
+
+              Đang làm mới...
+            </>
+          ) : (
+            <>
+              <i className="bi bi-arrow-clockwise me-2" />
+              Làm mới
+            </>
+          )}
         </button>
       </div>
 
@@ -370,17 +862,30 @@ function DashboardPage() {
             <div
               className="card border-0 shadow-sm h-100"
               role="button"
+              tabIndex={0}
               onClick={() => navigate(card.path)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" ||
+                  event.key === " "
+                ) {
+                  navigate(card.path);
+                }
+              }}
             >
               <div className="card-body">
-                <div className="d-flex justify-content-between align-items-start">
+                <div className="d-flex justify-content-between align-items-start gap-3">
                   <div>
                     <div className="text-muted small mb-2">
                       {card.title}
                     </div>
 
-                    <div className="fs-5 fw-bold">
+                    <div className={`fs-5 fw-bold ${card.textClass}`}>
                       {card.value}
+                    </div>
+
+                    <div className="text-muted small mt-2">
+                      {card.note}
                     </div>
                   </div>
 
@@ -396,7 +901,6 @@ function DashboardPage() {
 
       {/* Biểu đồ */}
       <div className="row g-4 mb-4">
-        {/* Biểu đồ số lượng nhập xuất */}
         <div className="col-lg-8">
           <div className="card border-0 shadow-sm h-100">
             <div className="card-body">
@@ -426,7 +930,10 @@ function DashboardPage() {
                     >
                       <CartesianGrid strokeDasharray="3 3" />
 
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12 }}
+                      />
 
                       <YAxis
                         tickFormatter={formatCompactNumber}
@@ -469,7 +976,6 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* Biểu đồ container theo kho */}
         <div className="col-lg-4">
           <div className="card border-0 shadow-sm h-100">
             <div className="card-body">
@@ -516,6 +1022,8 @@ function DashboardPage() {
                         ]}
                       />
 
+                      <Legend />
+
                       <Bar
                         dataKey="totalContainers"
                         name="Container tồn"
@@ -531,15 +1039,149 @@ function DashboardPage() {
         </div>
       </div>
 
-      {/* Hoạt động nhập và xuất gần đây */}
+      {/* Cảnh báo thời hạn lưu kho */}
+      <div className="card border-0 shadow-sm mb-4">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <h5 className="card-title mb-1">
+                Lô cần xử lý theo thời hạn lưu kho
+              </h5>
+
+              <p className="text-muted small mb-0">
+                Ưu tiên các lô đã quá hạn lưu và các lô sắp đến hạn.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger"
+              onClick={() => navigate("/inventory")}
+            >
+              Xem tồn kho
+            </button>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle">
+              <thead>
+                <tr>
+                  <th>Sản phẩm</th>
+                  <th>Kho và vị trí</th>
+                  <th>Mã lô</th>
+                  <th>Số lượng</th>
+                  <th>Container</th>
+                  <th>Ngày cuối trong hạn</th>
+                  <th>Thời gian còn lại</th>
+                  <th>Trạng thái</th>
+                  <th>Quy định xuất</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {storageAlertBatches.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="9"
+                      className="text-center text-muted py-4"
+                    >
+                      Không có lô sắp quá hạn hoặc đã quá hạn lưu kho.
+                    </td>
+                  </tr>
+                ) : (
+                  storageAlertBatches.map((batch) => (
+                    <tr
+                      key={batch.id}
+                      className={
+                        batch.storage_status === "overdue"
+                          ? "table-danger"
+                          : "table-warning"
+                      }
+                    >
+                      <td>
+                        <strong>
+                          {batch.product_name || "Không có"}
+                        </strong>
+
+                        <div className="text-muted small">
+                          SKU: {batch.sku || "Không có"}
+                        </div>
+                      </td>
+
+                      <td>
+                        <strong>
+                          {batch.warehouse_name || "Không có"}
+                        </strong>
+
+                        <div className="text-muted small">
+                          {batch.location_code ||
+                            batch.location_name ||
+                            "Chưa có vị trí"}
+                        </div>
+                      </td>
+
+                      <td>
+                        <strong>
+                          {batch.batch_code || "Không có"}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {formatNumber(batch.quantity)}
+                      </td>
+
+                      <td className="text-nowrap">
+                        {formatNumber(batch.container_quantity)} container
+                      </td>
+
+                      <td className="text-nowrap">
+                        {formatDate(batch.storage_due_date)}
+                      </td>
+
+                      <td>
+                        {getStorageRemainingText(batch)}
+                      </td>
+
+                      <td>
+                        {getStorageStatusBadge(batch)}
+                      </td>
+
+                      <td>
+                        {batch.allow_overdue_export === true ? (
+                          <div>
+                            <span className="badge bg-success">
+                              Được xuất quá hạn
+                            </span>
+
+                            {batch.require_overdue_note === true && (
+                              <div className="small text-danger mt-1">
+                                Bắt buộc ghi chú
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="badge bg-danger">
+                            Chặn xuất quá hạn
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Hoạt động gần đây */}
       <div className="row g-4 mb-4">
-        {/* Phiếu nhập */}
-        <div className="col-lg-6">
+        <div className="col-xl-5">
           <div className="card border-0 shadow-sm h-100">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="card-title mb-0">
-                  Hoạt động nhập kho gần đây
+                  Nhập kho gần đây
                 </h5>
 
                 <button
@@ -579,21 +1221,23 @@ function DashboardPage() {
                             <button
                               type="button"
                               className="btn btn-link p-0 text-decoration-none"
-                              onClick={() => navigate(`/stock-ins/${item.id}`)}
+                              onClick={() =>
+                                navigate(`/stock-ins/${item.id}`)
+                              }
                             >
                               PN-{String(item.id).padStart(4, "0")}
                             </button>
                           </td>
 
-                          <td>
+                          <td className="text-nowrap">
                             {formatDate(item.import_date)}
                           </td>
 
                           <td>
-                            {item.warehouse_name}
+                            {item.warehouse_name || "Không có"}
                           </td>
 
-                          <td>
+                          <td className="text-nowrap">
                             <strong>
                               {formatNumber(item.total_containers)} container
                             </strong>
@@ -608,13 +1252,12 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* Phiếu xuất */}
-        <div className="col-lg-6">
+        <div className="col-xl-7">
           <div className="card border-0 shadow-sm h-100">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="card-title mb-0">
-                  Hoạt động xuất kho gần đây
+                  Xuất kho và phí lưu gần đây
                 </h5>
 
                 <button
@@ -633,7 +1276,9 @@ function DashboardPage() {
                       <th>Mã phiếu</th>
                       <th>Ngày xuất</th>
                       <th>Container</th>
-                      <th>Phí lưu kho</th>
+                      <th>Phí trong hạn</th>
+                      <th>Phí quá hạn</th>
+                      <th>Tổng phí</th>
                     </tr>
                   </thead>
 
@@ -641,42 +1286,81 @@ function DashboardPage() {
                     {recentStockOuts.length === 0 ? (
                       <tr>
                         <td
-                          colSpan="4"
+                          colSpan="6"
                           className="text-center text-muted"
                         >
                           Chưa có phiếu xuất.
                         </td>
                       </tr>
                     ) : (
-                      recentStockOuts.map((item) => (
-                        <tr key={item.id}>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn btn-link p-0 text-decoration-none"
-                              onClick={() => navigate(`/stock-outs/${item.id}`)}
-                            >
-                              PX-{String(item.id).padStart(4, "0")}
-                            </button>
-                          </td>
+                      recentStockOuts.map((item) => {
+                        const regularAmount =
+                          getStockOutRegularAmount(item);
 
-                          <td>
-                            {formatDate(item.export_date)}
-                          </td>
+                        const overdueAmount =
+                          getStockOutOverdueAmount(item);
 
-                          <td>
-                            <strong>
-                              {formatNumber(item.total_containers)} container
-                            </strong>
-                          </td>
+                        const totalAmount =
+                          getStockOutTotalAmount(item);
 
-                          <td>
-                            <strong className="text-primary">
-                              {formatCurrency(item.total_amount)}
-                            </strong>
-                          </td>
-                        </tr>
-                      ))
+                        return (
+                          <tr
+                            key={item.id}
+                            className={
+                              overdueAmount > 0
+                                ? "table-warning"
+                                : ""
+                            }
+                          >
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-decoration-none"
+                                onClick={() =>
+                                  navigate(`/stock-outs/${item.id}`)
+                                }
+                              >
+                                PX-{String(item.id).padStart(4, "0")}
+                              </button>
+                            </td>
+
+                            <td className="text-nowrap">
+                              {formatDate(item.export_date)}
+                            </td>
+
+                            <td className="text-nowrap">
+                              <strong>
+                                {formatNumber(
+                                  item.total_containers
+                                )}{" "}
+                                container
+                              </strong>
+                            </td>
+
+                            <td className="text-nowrap">
+                              {formatCurrency(regularAmount)}
+                            </td>
+
+                            <td className="text-nowrap">
+                              <strong
+                                className={
+                                  overdueAmount > 0
+                                    ? "text-danger"
+                                    : ""
+                                }
+                              >
+                                {formatCurrency(overdueAmount)}
+                              </strong>
+                            </td>
+
+                            <td className="text-nowrap">
+                              <strong className="text-success">
+                                {formatCurrency(totalAmount)}
+                              </strong>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -686,17 +1370,17 @@ function DashboardPage() {
         </div>
       </div>
 
-      {/* Cảnh báo sắp hết hạn */}
+      {/* Cảnh báo hạn sử dụng */}
       <div className="card border-0 shadow-sm">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-3">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <div>
               <h5 className="card-title mb-1">
-                Cảnh báo lô sắp hết hạn
+                Cảnh báo lô sắp hết hạn sử dụng
               </h5>
 
               <p className="text-muted small mb-0">
-                Các lô sẽ hết hạn trong vòng 30 ngày.
+                Các lô sắp hết hạn nên được ưu tiên xuất theo FEFO.
               </p>
             </div>
 
@@ -730,7 +1414,7 @@ function DashboardPage() {
                       colSpan="7"
                       className="text-center text-muted"
                     >
-                      Không có lô sắp hết hạn.
+                      Không có lô sắp hết hạn sử dụng.
                     </td>
                   </tr>
                 ) : (
@@ -738,37 +1422,37 @@ function DashboardPage() {
                     <tr key={batch.id}>
                       <td>
                         <strong>
-                          {batch.product_name}
+                          {batch.product_name || "Không có"}
                         </strong>
 
                         <div className="text-muted small">
-                          {batch.sku}
+                          SKU: {batch.sku || "Không có"}
                         </div>
                       </td>
 
                       <td>
-                        {batch.warehouse_name}
+                        {batch.warehouse_name || "Không có"}
                       </td>
 
                       <td>
-                        {batch.batch_code}
+                        {batch.batch_code || "Không có"}
                       </td>
 
                       <td>
                         {formatNumber(batch.quantity)}
                       </td>
 
-                      <td>
+                      <td className="text-nowrap">
                         {formatNumber(batch.container_quantity)} container
                       </td>
 
-                      <td>
+                      <td className="text-nowrap">
                         {formatDate(batch.expiry_date)}
                       </td>
 
                       <td>
                         <span className="badge bg-warning text-dark">
-                          Còn {batch.days_until_expiry} ngày
+                          Còn {formatNumber(batch.days_until_expiry)} ngày
                         </span>
                       </td>
                     </tr>
@@ -780,7 +1464,8 @@ function DashboardPage() {
 
           <div className="alert alert-info mb-0 mt-3">
             <strong>Ghi chú:</strong>{" "}
-            Dashboard hiện theo nghiệp vụ kho bãi: tập trung vào số lượng, container, lô hàng, hạn sử dụng và phí lưu kho khi xuất hàng.
+            Hạn sử dụng quyết định việc lô có được xuất hay không.
+            Thời hạn lưu kho quyết định cảnh báo và phí quá hạn.
           </div>
         </div>
       </div>

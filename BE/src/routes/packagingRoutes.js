@@ -15,44 +15,88 @@ const {
 
 const router = express.Router();
 
-// ADMIN và MANAGER và STAFFđược xem toàn bộ quy cách đóng gói
+/*
+|--------------------------------------------------------------------------
+| Xem toàn bộ quy cách đóng gói
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER", "STAFF"),
+  authorize(
+    "ADMIN",
+    "MANAGER",
+    "STAFF"
+  ),
   getAllPackaging
 );
 
-// ADMIN, MANAGER và STAFF được lấy quy cách theo sản phẩm
-// Route này cần cho màn hình nhập kho và xuất kho
+/*
+|--------------------------------------------------------------------------
+| Xem quy cách theo sản phẩm
+|--------------------------------------------------------------------------
+|
+| API này được dùng trong màn hình nhập kho và xuất kho.
+|
+*/
+
 router.get(
   "/product/:productId",
   authenticate,
-  authorize("ADMIN", "MANAGER", "STAFF"),
+  authorize(
+    "ADMIN",
+    "MANAGER",
+    "STAFF"
+  ),
   getPackagingByProduct
 );
 
-// ADMIN và MANAGER được thêm quy cách đóng gói
+/*
+|--------------------------------------------------------------------------
+| Thêm quy cách đóng gói
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   createPackaging
 );
 
-// ADMIN và MANAGER được cập nhật quy cách đóng gói
+/*
+|--------------------------------------------------------------------------
+| Cập nhật quy cách đóng gói
+|--------------------------------------------------------------------------
+*/
+
 router.put(
   "/:id",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   updatePackaging
 );
 
-// Chỉ ADMIN được xóa quy cách đóng gói
+/*
+|--------------------------------------------------------------------------
+| Xóa quy cách đóng gói
+|--------------------------------------------------------------------------
+*/
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("ADMIN"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   deletePackaging
 );
 

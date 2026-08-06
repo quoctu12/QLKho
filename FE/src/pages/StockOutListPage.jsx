@@ -4,6 +4,42 @@ import { useNavigate } from "react-router-dom";
 import { getStockOuts } from "../api/stockOutApi";
 import { getWarehouses } from "../api/warehouseApi";
 
+/*
+|--------------------------------------------------------------------------
+| Chuyển ngày về timestamp chỉ gồm năm, tháng, ngày
+|--------------------------------------------------------------------------
+*/
+
+function toDateOnlyTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  const matchedDate = String(value).match(
+    /^(\d{4})-(\d{2})-(\d{2})/
+  );
+
+  if (matchedDate) {
+    return Date.UTC(
+      Number(matchedDate[1]),
+      Number(matchedDate[2]) - 1,
+      Number(matchedDate[3])
+    );
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  );
+}
+
 function StockOutListPage() {
   const navigate = useNavigate();
 
@@ -104,9 +140,17 @@ function StockOutListPage() {
 
       const data = await getWarehouses();
 
-      setWarehouses(Array.isArray(data) ? data : []);
+      setWarehouses(
+        Array.isArray(data)
+          ? data
+          : []
+      );
     } catch (err) {
-      console.error("Lỗi tải danh sách kho:", err);
+      console.error(
+        "Lỗi tải danh sách kho:",
+        err
+      );
+
       setWarehouses([]);
     } finally {
       setLoadingWarehouses(false);
@@ -129,22 +173,36 @@ function StockOutListPage() {
         sort_by: sortBy,
       });
 
-      const stockOutRows = Array.isArray(data?.stock_outs)
-        ? data.stock_outs
-        : [];
+      const stockOutRows =
+        Array.isArray(data?.stock_outs)
+          ? data.stock_outs
+          : [];
 
-      const paginationData = data?.pagination || {};
+      const paginationData =
+        data?.pagination || {};
 
       setStockOuts(stockOutRows);
 
+      const responsePage = Number(
+        paginationData.page || currentPage
+      );
+
+      const responseTotalPages = Math.max(
+        1,
+        Number(
+          paginationData.total_pages || 1
+        )
+      );
+
       setPagination({
-        page: Number(paginationData.page || currentPage),
-        limit: Number(paginationData.limit || pageSize),
-        total_items: Number(paginationData.total_items || 0),
-        total_pages: Math.max(
-          1,
-          Number(paginationData.total_pages || 1)
+        page: responsePage,
+        limit: Number(
+          paginationData.limit || pageSize
         ),
+        total_items: Number(
+          paginationData.total_items || 0
+        ),
+        total_pages: responseTotalPages,
         has_previous_page: Boolean(
           paginationData.has_previous_page
         ),
@@ -152,8 +210,15 @@ function StockOutListPage() {
           paginationData.has_next_page
         ),
       });
+
+      if (responsePage !== currentPage) {
+        setCurrentPage(responsePage);
+      }
     } catch (err) {
-      console.error("Lỗi tải phiếu xuất:", err);
+      console.error(
+        "Lỗi tải phiếu xuất:",
+        err
+      );
 
       setStockOuts([]);
 
@@ -195,47 +260,175 @@ function StockOutListPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Format dữ liệu
+  | Định dạng dữ liệu
   |--------------------------------------------------------------------------
   */
 
   function formatCurrency(value) {
-    return Number(value || 0).toLocaleString("vi-VN", {
+    return Number(
+      value || 0
+    ).toLocaleString("vi-VN", {
       style: "currency",
       currency: "VND",
     });
   }
 
   function formatNumber(value) {
-    return Number(value || 0).toLocaleString("vi-VN");
+    return Number(
+      value || 0
+    ).toLocaleString("vi-VN");
   }
 
   function formatDate(value) {
-    if (!value) {
+    const timestamp =
+      toDateOnlyTimestamp(value);
+
+    if (timestamp === null) {
       return "Không có";
     }
 
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "Không hợp lệ";
-    }
-
-    return date.toLocaleDateString("vi-VN");
+    return new Date(
+      timestamp
+    ).toLocaleDateString("vi-VN", {
+      timeZone: "UTC",
+    });
   }
 
-  const totalItems = pagination.total_items;
-  const totalPages = pagination.total_pages;
+  /*
+  |--------------------------------------------------------------------------
+  | Lấy trạng thái phí của phiếu xuất
+  |--------------------------------------------------------------------------
+  */
+
+  function getFeeStatus(stockOut) {
+    const regularAmount = Number(
+      stockOut.total_regular_amount || 0
+    );
+
+    const overdueAmount = Number(
+      stockOut.total_overdue_amount || 0
+    );
+
+    const totalAmount = Number(
+      stockOut.total_amount || 0
+    );
+
+    if (totalAmount <= 0) {
+      return {
+        key: "no_fee",
+        label: "Chưa phát sinh phí",
+        className: "bg-secondary",
+      };
+    }
+
+    if (overdueAmount > 0) {
+      return {
+        key: "overdue",
+        label: "Có phí quá hạn",
+        className: "bg-danger",
+      };
+    }
+
+    if (regularAmount > 0) {
+      return {
+        key: "regular",
+        label: "Trong hạn",
+        className: "bg-success",
+      };
+    }
+
+    return {
+      key: "unknown",
+      label: "Chưa xác định",
+      className: "bg-dark",
+    };
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Thông tin phân trang
+  |--------------------------------------------------------------------------
+  */
+
+  const totalItems =
+    pagination.total_items;
+
+  const totalPages =
+    pagination.total_pages;
 
   const firstItemNumber =
     totalItems === 0
       ? 0
-      : (currentPage - 1) * pageSize + 1;
+      : (currentPage - 1) *
+          pageSize +
+        1;
 
-  const lastItemNumber = Math.min(
-    currentPage * pageSize,
-    totalItems
-  );
+  const lastItemNumber =
+    Math.min(
+      currentPage * pageSize,
+      totalItems
+    );
+
+  /*
+  |--------------------------------------------------------------------------
+  | Tổng phí của các phiếu đang hiển thị
+  |--------------------------------------------------------------------------
+  */
+
+  const currentPageTotals =
+    useMemo(
+      () =>
+        stockOuts.reduce(
+          (result, stockOut) => ({
+            containers:
+              result.containers +
+              Number(
+                stockOut.total_containers ||
+                  0
+              ),
+
+            regularAmount:
+              result.regularAmount +
+              Number(
+                stockOut.total_regular_amount ||
+                  0
+              ),
+
+            overdueAmount:
+              result.overdueAmount +
+              Number(
+                stockOut.total_overdue_amount ||
+                  0
+              ),
+
+            totalAmount:
+              result.totalAmount +
+              Number(
+                stockOut.total_amount ||
+                  0
+              ),
+
+            overdueVoucherCount:
+              result.overdueVoucherCount +
+              (
+                Number(
+                  stockOut.total_overdue_amount ||
+                    0
+                ) > 0
+                  ? 1
+                  : 0
+              ),
+          }),
+          {
+            containers: 0,
+            regularAmount: 0,
+            overdueAmount: 0,
+            totalAmount: 0,
+            overdueVoucherCount: 0,
+          }
+        ),
+      [stockOuts]
+    );
 
   /*
   |--------------------------------------------------------------------------
@@ -243,32 +436,44 @@ function StockOutListPage() {
   |--------------------------------------------------------------------------
   */
 
-  const visiblePages = useMemo(() => {
-    const maximumVisiblePages = 5;
+  const visiblePages =
+    useMemo(() => {
+      const maximumVisiblePages = 5;
 
-    let startPage = Math.max(
-      1,
-      currentPage - Math.floor(maximumVisiblePages / 2)
-    );
+      let startPage = Math.max(
+        1,
+        currentPage -
+          Math.floor(
+            maximumVisiblePages / 2
+          )
+      );
 
-    let endPage = Math.min(
-      totalPages,
-      startPage + maximumVisiblePages - 1
-    );
+      let endPage = Math.min(
+        totalPages,
+        startPage +
+          maximumVisiblePages -
+          1
+      );
 
-    startPage = Math.max(
-      1,
-      endPage - maximumVisiblePages + 1
-    );
+      startPage = Math.max(
+        1,
+        endPage -
+          maximumVisiblePages +
+          1
+      );
 
-    const pages = [];
+      const pages = [];
 
-    for (let page = startPage; page <= endPage; page += 1) {
-      pages.push(page);
-    }
+      for (
+        let page = startPage;
+        page <= endPage;
+        page += 1
+      ) {
+        pages.push(page);
+      }
 
-    return pages;
-  }, [currentPage, totalPages]);
+      return pages;
+    }, [currentPage, totalPages]);
 
   return (
     <div>
@@ -280,16 +485,21 @@ function StockOutListPage() {
           </h1>
 
           <p className="text-muted mb-0">
-            Theo dõi phiếu xuất, container xuất và tổng phí lưu kho.
+            Theo dõi container quyết toán, phí trong hạn và phụ phí quá hạn.
           </p>
         </div>
 
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => navigate("/stock-outs/create")}
+          onClick={() =>
+            navigate(
+              "/stock-outs/create"
+            )
+          }
         >
           <i className="bi bi-plus-lg me-2" />
+
           Tạo phiếu xuất
         </button>
       </div>
@@ -322,7 +532,11 @@ function StockOutListPage() {
                   type="search"
                   className="form-control"
                   value={keyword}
-                  onChange={(event) => setKeyword(event.target.value)}
+                  onChange={(event) =>
+                    setKeyword(
+                      event.target.value
+                    )
+                  }
                   placeholder="Mã phiếu, kho, cổng hoặc người tạo"
                 />
               </div>
@@ -340,23 +554,31 @@ function StockOutListPage() {
                 id="stock-out-warehouse-filter"
                 className="form-select"
                 value={warehouseFilter}
-                disabled={loadingWarehouses}
+                disabled={
+                  loadingWarehouses
+                }
                 onChange={(event) =>
-                  setWarehouseFilter(event.target.value)
+                  setWarehouseFilter(
+                    event.target.value
+                  )
                 }
               >
                 <option value="">
-                  {loadingWarehouses ? "Đang tải kho..." : "Tất cả kho"}
+                  {loadingWarehouses
+                    ? "Đang tải kho..."
+                    : "Tất cả kho"}
                 </option>
 
-                {warehouses.map((warehouse) => (
-                  <option
-                    key={warehouse.id}
-                    value={warehouse.id}
-                  >
-                    {warehouse.name}
-                  </option>
-                ))}
+                {warehouses.map(
+                  (warehouse) => (
+                    <option
+                      key={warehouse.id}
+                      value={warehouse.id}
+                    >
+                      {warehouse.name}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -373,7 +595,9 @@ function StockOutListPage() {
                 className="form-select"
                 value={exportRuleFilter}
                 onChange={(event) =>
-                  setExportRuleFilter(event.target.value)
+                  setExportRuleFilter(
+                    event.target.value
+                  )
                 }
               >
                 <option value="">
@@ -402,7 +626,11 @@ function StockOutListPage() {
                 id="stock-out-sort"
                 className="form-select"
                 value={sortBy}
-                onChange={(event) => setSortBy(event.target.value)}
+                onChange={(event) =>
+                  setSortBy(
+                    event.target.value
+                  )
+                }
               >
                 <option value="newest">
                   Phiếu mới nhất
@@ -421,11 +649,11 @@ function StockOutListPage() {
                 </option>
 
                 <option value="amount_desc">
-                  Phí lưu kho cao nhất
+                  Tổng phí cao nhất
                 </option>
 
                 <option value="amount_asc">
-                  Phí lưu kho thấp nhất
+                  Tổng phí thấp nhất
                 </option>
               </select>
             </div>
@@ -443,8 +671,14 @@ function StockOutListPage() {
                 type="date"
                 className="form-control"
                 value={dateFrom}
-                max={dateTo || undefined}
-                onChange={(event) => setDateFrom(event.target.value)}
+                max={
+                  dateTo || undefined
+                }
+                onChange={(event) =>
+                  setDateFrom(
+                    event.target.value
+                  )
+                }
               />
             </div>
 
@@ -461,8 +695,14 @@ function StockOutListPage() {
                 type="date"
                 className="form-control"
                 value={dateTo}
-                min={dateFrom || undefined}
-                onChange={(event) => setDateTo(event.target.value)}
+                min={
+                  dateFrom || undefined
+                }
+                onChange={(event) =>
+                  setDateTo(
+                    event.target.value
+                  )
+                }
               />
             </div>
 
@@ -479,7 +719,11 @@ function StockOutListPage() {
                 className="form-select"
                 value={pageSize}
                 onChange={(event) =>
-                  setPageSize(Number(event.target.value))
+                  setPageSize(
+                    Number(
+                      event.target.value
+                    )
+                  )
                 }
               >
                 <option value={5}>
@@ -504,10 +748,13 @@ function StockOutListPage() {
               <button
                 type="button"
                 className="btn btn-outline-secondary w-100"
-                onClick={handleResetFilters}
+                onClick={
+                  handleResetFilters
+                }
                 disabled={loading}
               >
                 <i className="bi bi-arrow-counterclockwise me-2" />
+
                 Xóa lọc
               </button>
             </div>
@@ -516,9 +763,86 @@ function StockOutListPage() {
               <div className="text-muted">
                 Tìm thấy{" "}
                 <strong className="text-dark">
-                  {formatNumber(totalItems)}
+                  {formatNumber(
+                    totalItems
+                  )}
                 </strong>{" "}
                 phiếu
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tổng quan trang hiện tại */}
+      <div className="row g-3 mb-4">
+        <div className="col-xl-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small mb-1">
+                Container quyết toán
+              </div>
+
+              <div className="h5 mb-0 text-primary">
+                {formatNumber(
+                  currentPageTotals.containers
+                )}{" "}
+                container
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-xl-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small mb-1">
+                Phí trong hạn
+              </div>
+
+              <div className="h5 mb-0">
+                {formatCurrency(
+                  currentPageTotals.regularAmount
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-xl-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small mb-1">
+                Phí quá hạn
+              </div>
+
+              <div className="h5 mb-0 text-danger">
+                {formatCurrency(
+                  currentPageTotals.overdueAmount
+                )}
+              </div>
+
+              <div className="small text-muted mt-1">
+                {formatNumber(
+                  currentPageTotals.overdueVoucherCount
+                )}{" "}
+                phiếu có phụ phí
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-xl-3 col-md-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body">
+              <div className="text-muted small mb-1">
+                Tổng phí
+              </div>
+
+              <div className="h5 mb-0 text-success">
+                {formatCurrency(
+                  currentPageTotals.totalAmount
+                )}
               </div>
             </div>
           </div>
@@ -539,9 +863,12 @@ function StockOutListPage() {
                   <th>Cổng xuất</th>
                   <th>Quy tắc</th>
                   <th>Người tạo</th>
-                  <th>Số dòng xuất</th>
-                  <th>Tổng container</th>
-                  <th>Tổng phí lưu kho</th>
+                  <th>Số dòng</th>
+                  <th>Container quyết toán</th>
+                  <th>Phí trong hạn</th>
+                  <th>Phí quá hạn</th>
+                  <th>Tổng phí</th>
+                  <th>Trạng thái phí</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
@@ -550,7 +877,7 @@ function StockOutListPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="11"
+                      colSpan="14"
                       className="text-center text-muted py-5"
                     >
                       <div
@@ -564,85 +891,230 @@ function StockOutListPage() {
                 ) : stockOuts.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="11"
+                      colSpan="14"
                       className="text-center text-muted py-5"
                     >
                       <i className="bi bi-box-arrow-up fs-2 d-block mb-2" />
+
                       Không tìm thấy phiếu xuất phù hợp.
                     </td>
                   </tr>
                 ) : (
-                  stockOuts.map((stockOut, index) => (
-                    <tr key={stockOut.id}>
-                      <td>
-                        {firstItemNumber + index}
-                      </td>
+                  stockOuts.map(
+                    (stockOut, index) => {
+                      const regularAmount =
+                        Number(
+                          stockOut.total_regular_amount ||
+                            0
+                        );
 
-                      <td>
-                        <strong>
-                          PX-{String(stockOut.id).padStart(4, "0")}
-                        </strong>
-                      </td>
+                      const overdueAmount =
+                        Number(
+                          stockOut.total_overdue_amount ||
+                            0
+                        );
 
-                      <td>
-                        {formatDate(stockOut.export_date)}
-                      </td>
+                      const totalAmount =
+                        Number(
+                          stockOut.total_amount ||
+                            0
+                        );
 
-                      <td>
-                        {stockOut.warehouse_name}
-                      </td>
+                      const feeStatus =
+                        getFeeStatus(
+                          stockOut
+                        );
 
-                      <td>
-                        {stockOut.gate_name}
-                      </td>
-
-                      <td>
-                        <span
-                          className={`badge ${
-                            stockOut.export_rule === "FEFO"
-                              ? "bg-warning text-dark"
-                              : "bg-primary"
-                          }`}
-                        >
-                          {stockOut.export_rule}
-                        </span>
-                      </td>
-
-                      <td>
-                        {stockOut.created_by}
-                      </td>
-
-                      <td>
-                        {formatNumber(stockOut.total_items)}
-                      </td>
-
-                      <td>
-                        <strong>
-                          {formatNumber(stockOut.total_containers)} container
-                        </strong>
-                      </td>
-
-                      <td>
-                        <strong className="text-primary">
-                          {formatCurrency(stockOut.total_amount)}
-                        </strong>
-                      </td>
-
-                      <td className="text-nowrap">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-primary"
-                          onClick={() =>
-                            navigate(`/stock-outs/${stockOut.id}`)
+                      return (
+                        <tr
+                          key={stockOut.id}
+                          className={
+                            feeStatus.key ===
+                            "overdue"
+                              ? "table-warning"
+                              : ""
                           }
                         >
-                          Xem
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                          <td>
+                            {firstItemNumber +
+                              index}
+                          </td>
+
+                          <td>
+                            <strong>
+                              PX-
+                              {String(
+                                stockOut.id
+                              ).padStart(
+                                4,
+                                "0"
+                              )}
+                            </strong>
+                          </td>
+
+                          <td className="text-nowrap">
+                            {formatDate(
+                              stockOut.export_date
+                            )}
+                          </td>
+
+                          <td>
+                            {stockOut.warehouse_name ||
+                              "Không có"}
+                          </td>
+
+                          <td>
+                            {stockOut.gate_name ||
+                              "Không có"}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`badge ${
+                                stockOut.export_rule ===
+                                "FEFO"
+                                  ? "bg-warning text-dark"
+                                  : "bg-primary"
+                              }`}
+                            >
+                              {stockOut.export_rule ||
+                                "Không có"}
+                            </span>
+                          </td>
+
+                          <td>
+                            {stockOut.created_by ||
+                              "Không có"}
+                          </td>
+
+                          <td className="text-center">
+                            {formatNumber(
+                              stockOut.total_items
+                            )}
+                          </td>
+
+                          <td className="text-nowrap">
+                            <strong className="text-primary">
+                              {formatNumber(
+                                stockOut.total_containers
+                              )}{" "}
+                              container
+                            </strong>
+
+                            {Number(
+                              stockOut.total_containers ||
+                                0
+                            ) === 0 && (
+                              <div className="small text-muted">
+                                Chưa giải phóng container
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="text-nowrap">
+                            <strong>
+                              {formatCurrency(
+                                regularAmount
+                              )}
+                            </strong>
+                          </td>
+
+                          <td className="text-nowrap">
+                            <strong
+                              className={
+                                overdueAmount >
+                                0
+                                  ? "text-danger"
+                                  : ""
+                              }
+                            >
+                              {formatCurrency(
+                                overdueAmount
+                              )}
+                            </strong>
+                          </td>
+
+                          <td className="text-nowrap">
+                            <strong className="text-success">
+                              {formatCurrency(
+                                totalAmount
+                              )}
+                            </strong>
+                          </td>
+
+                          <td className="text-nowrap">
+                            <span
+                              className={`badge ${feeStatus.className}`}
+                            >
+                              {
+                                feeStatus.label
+                              }
+                            </span>
+                          </td>
+
+                          <td className="text-nowrap">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() =>
+                                navigate(
+                                  `/stock-outs/${stockOut.id}`
+                                )
+                              }
+                            >
+                              <i className="bi bi-eye me-1" />
+
+                              Xem
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )
                 )}
               </tbody>
+
+              {!loading &&
+                stockOuts.length >
+                  0 && (
+                  <tfoot>
+                    <tr>
+                      <th
+                        colSpan="8"
+                        className="text-end"
+                      >
+                        Tổng trang hiện tại
+                      </th>
+
+                      <th className="text-nowrap text-primary">
+                        {formatNumber(
+                          currentPageTotals.containers
+                        )}{" "}
+                        container
+                      </th>
+
+                      <th className="text-nowrap">
+                        {formatCurrency(
+                          currentPageTotals.regularAmount
+                        )}
+                      </th>
+
+                      <th className="text-nowrap text-danger">
+                        {formatCurrency(
+                          currentPageTotals.overdueAmount
+                        )}
+                      </th>
+
+                      <th className="text-nowrap text-success">
+                        {formatCurrency(
+                          currentPageTotals.totalAmount
+                        )}
+                      </th>
+
+                      <th colSpan="2" />
+                    </tr>
+                  </tfoot>
+                )}
             </table>
           </div>
 
@@ -651,15 +1123,21 @@ function StockOutListPage() {
             <div className="text-muted small">
               Hiển thị{" "}
               <strong>
-                {formatNumber(firstItemNumber)}
+                {formatNumber(
+                  firstItemNumber
+                )}
               </strong>{" "}
               đến{" "}
               <strong>
-                {formatNumber(lastItemNumber)}
+                {formatNumber(
+                  lastItemNumber
+                )}
               </strong>{" "}
               trên tổng{" "}
               <strong>
-                {formatNumber(totalItems)}
+                {formatNumber(
+                  totalItems
+                )}
               </strong>{" "}
               phiếu xuất
             </div>
@@ -668,58 +1146,95 @@ function StockOutListPage() {
               <ul className="pagination pagination-sm mb-0">
                 <li
                   className={`page-item ${
-                    currentPage === 1 ? "disabled" : ""
+                    currentPage === 1
+                      ? "disabled"
+                      : ""
                   }`}
                 >
                   <button
                     type="button"
                     className="page-link"
-                    disabled={currentPage === 1 || loading}
+                    disabled={
+                      currentPage === 1 ||
+                      loading
+                    }
                     onClick={() =>
-                      setCurrentPage((previousPage) =>
-                        Math.max(1, previousPage - 1)
+                      setCurrentPage(
+                        (
+                          previousPage
+                        ) =>
+                          Math.max(
+                            1,
+                            previousPage -
+                              1
+                          )
                       )
                     }
                   >
                     <i className="bi bi-chevron-left me-1" />
+
                     Trước
                   </button>
                 </li>
 
-                {visiblePages.map((page) => (
-                  <li
-                    key={page}
-                    className={`page-item ${
-                      currentPage === page ? "active" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="page-link"
-                      disabled={loading}
-                      onClick={() => setCurrentPage(page)}
+                {visiblePages.map(
+                  (page) => (
+                    <li
+                      key={page}
+                      className={`page-item ${
+                        currentPage ===
+                        page
+                          ? "active"
+                          : ""
+                      }`}
                     >
-                      {page}
-                    </button>
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        className="page-link"
+                        disabled={loading}
+                        onClick={() =>
+                          setCurrentPage(
+                            page
+                          )
+                        }
+                      >
+                        {page}
+                      </button>
+                    </li>
+                  )
+                )}
 
                 <li
                   className={`page-item ${
-                    currentPage === totalPages ? "disabled" : ""
+                    currentPage ===
+                    totalPages
+                      ? "disabled"
+                      : ""
                   }`}
                 >
                   <button
                     type="button"
                     className="page-link"
-                    disabled={currentPage === totalPages || loading}
+                    disabled={
+                      currentPage ===
+                        totalPages ||
+                      loading
+                    }
                     onClick={() =>
-                      setCurrentPage((previousPage) =>
-                        Math.min(totalPages, previousPage + 1)
+                      setCurrentPage(
+                        (
+                          previousPage
+                        ) =>
+                          Math.min(
+                            totalPages,
+                            previousPage +
+                              1
+                          )
                       )
                     }
                   >
                     Sau
+
                     <i className="bi bi-chevron-right ms-1" />
                   </button>
                 </li>
@@ -728,8 +1243,11 @@ function StockOutListPage() {
           </div>
 
           <div className="alert alert-info mb-0 mt-3">
-            <strong>Ghi chú:</strong>{" "}
-            Tổng phí lưu kho được tính từ chi tiết phiếu xuất: số container xuất × số ngày lưu kho × đơn giá lưu kho.
+            <strong>
+              Cách tính:
+            </strong>{" "}
+            Phí trong hạn = container quyết toán × số ngày trong hạn × đơn giá.
+            Phí quá hạn = container quyết toán × số ngày quá hạn × đơn giá × hệ số quá hạn.
           </div>
         </div>
       </div>

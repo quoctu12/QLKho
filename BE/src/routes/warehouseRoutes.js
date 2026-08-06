@@ -14,7 +14,15 @@ const {
 
 const router = express.Router();
 
-// ADMIN và MANAGER và STAFF được xem danh sách kho
+/*
+|--------------------------------------------------------------------------
+| Xem danh sách kho
+|--------------------------------------------------------------------------
+|
+| STAFF cần xem kho để lập phiếu nhập, phiếu xuất và tra cứu tồn kho.
+|
+*/
+
 router.get(
   "/",
   authenticate,
@@ -22,7 +30,12 @@ router.get(
   getAllWarehouses
 );
 
-// ADMIN và MANAGER được thêm kho
+/*
+|--------------------------------------------------------------------------
+| Thêm kho
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
   authenticate,
@@ -30,7 +43,12 @@ router.post(
   createWarehouse
 );
 
-// ADMIN và MANAGER được cập nhật kho
+/*
+|--------------------------------------------------------------------------
+| Cập nhật kho
+|--------------------------------------------------------------------------
+*/
+
 router.put(
   "/:id",
   authenticate,
@@ -38,11 +56,20 @@ router.put(
   updateWarehouse
 );
 
-// Chỉ ADMIN được xóa kho
+/*
+|--------------------------------------------------------------------------
+| Xóa kho
+|--------------------------------------------------------------------------
+|
+| ADMIN và MANAGER được thực hiện.
+| Controller vẫn phải chặn xóa khi kho đã phát sinh dữ liệu.
+|
+*/
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("ADMIN"),
+  authorize("ADMIN", "MANAGER"),
   deleteWarehouse
 );
 

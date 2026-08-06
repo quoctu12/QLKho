@@ -1,5 +1,11 @@
 const jwt = require("jsonwebtoken");
 
+/*
+|--------------------------------------------------------------------------
+| Kiểm tra đăng nhập
+|--------------------------------------------------------------------------
+*/
+
 function authenticate(req, res, next) {
   try {
     const authorizationHeader =
@@ -18,6 +24,13 @@ function authenticate(req, res, next) {
     const token =
       authorizationHeader.split(" ")[1];
 
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Token đăng nhập không hợp lệ.",
+      });
+    }
+
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET
@@ -35,6 +48,12 @@ function authenticate(req, res, next) {
   }
 }
 
+/*
+|--------------------------------------------------------------------------
+| Kiểm tra vai trò
+|--------------------------------------------------------------------------
+*/
+
 function authorize(...allowedRoles) {
   return function (req, res, next) {
     if (!req.user) {
@@ -44,7 +63,20 @@ function authorize(...allowedRoles) {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const currentRole = String(
+      req.user.role || ""
+    ).toUpperCase();
+
+    const normalizedAllowedRoles =
+      allowedRoles.map((role) =>
+        String(role).toUpperCase()
+      );
+
+    if (
+      !normalizedAllowedRoles.includes(
+        currentRole
+      )
+    ) {
       return res.status(403).json({
         success: false,
         message:

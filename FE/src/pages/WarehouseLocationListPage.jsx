@@ -8,8 +8,20 @@ import {
   updateWarehouseLocationStatus,
 } from "../api/warehouseLocationApi";
 
+import { useAuth } from "../contexts/AuthContext";
+
 function WarehouseLocationListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const currentRole = String(
+    user?.role || ""
+  ).toUpperCase();
+
+  const canManageLocation = [
+    "ADMIN",
+    "MANAGER",
+  ].includes(currentRole);
 
   const [locations, setLocations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -21,14 +33,13 @@ function WarehouseLocationListPage() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [loadingWarehouses, setLoadingWarehouses] = useState(true);
-  const [error, setError] = useState("");
 
-  /*
-  |--------------------------------------------------------------------------
-  | Tải dữ liệu ban đầu
-  |--------------------------------------------------------------------------
-  */
+  const [
+    loadingWarehouses,
+    setLoadingWarehouses,
+  ] = useState(true);
+
+  const [error, setError] = useState("");
 
   useEffect(() => {
     loadWarehouses();
@@ -41,9 +52,15 @@ function WarehouseLocationListPage() {
 
       const data = await getWarehouses();
 
-      setWarehouses(Array.isArray(data) ? data : []);
+      setWarehouses(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
-      console.error("Lỗi tải danh sách kho:", err);
+      console.error(
+        "Lỗi tải danh sách kho:",
+        err
+      );
+
       setWarehouses([]);
     } finally {
       setLoadingWarehouses(false);
@@ -55,11 +72,19 @@ function WarehouseLocationListPage() {
       setLoading(true);
       setError("");
 
-      const data = await getWarehouseLocations(params);
+      const data =
+        await getWarehouseLocations(params);
 
-      setLocations(Array.isArray(data) ? data : []);
+      setLocations(
+        Array.isArray(data) ? data : []
+      );
     } catch (err) {
-      console.error("Lỗi tải vị trí kho:", err);
+      console.error(
+        "Lỗi tải vị trí kho:",
+        err
+      );
+
+      setLocations([]);
 
       setError(
         err.response?.data?.message ||
@@ -69,12 +94,6 @@ function WarehouseLocationListPage() {
       setLoading(false);
     }
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Xử lý bộ lọc
-  |--------------------------------------------------------------------------
-  */
 
   function handleFilterChange(event) {
     const { name, value } = event.target;
@@ -89,11 +108,13 @@ function WarehouseLocationListPage() {
     const params = {};
 
     if (filters.warehouse_id) {
-      params.warehouse_id = filters.warehouse_id;
+      params.warehouse_id =
+        filters.warehouse_id;
     }
 
     if (filters.keyword.trim()) {
-      params.keyword = filters.keyword.trim();
+      params.keyword =
+        filters.keyword.trim();
     }
 
     if (filters.status) {
@@ -105,6 +126,7 @@ function WarehouseLocationListPage() {
 
   function handleSearch(event) {
     event.preventDefault();
+
     loadLocations(buildFilterParams());
   }
 
@@ -118,15 +140,18 @@ function WarehouseLocationListPage() {
     loadLocations();
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | Khóa / mở khóa vị trí kho
-  |--------------------------------------------------------------------------
-  */
-
   async function handleToggleStatus(location) {
+    if (!canManageLocation) {
+      alert(
+        "Bạn không có quyền thay đổi trạng thái vị trí kho."
+      );
+      return;
+    }
+
     const nextStatus =
-      location.status === "active" ? "inactive" : "active";
+      location.status === "active"
+        ? "inactive"
+        : "active";
 
     const confirmMessage =
       nextStatus === "active"
@@ -140,10 +165,19 @@ function WarehouseLocationListPage() {
     try {
       setError("");
 
-      await updateWarehouseLocationStatus(location.id, nextStatus);
-      await loadLocations(buildFilterParams());
+      await updateWarehouseLocationStatus(
+        location.id,
+        nextStatus
+      );
+
+      await loadLocations(
+        buildFilterParams()
+      );
     } catch (err) {
-      console.error("Lỗi cập nhật trạng thái vị trí kho:", err);
+      console.error(
+        "Lỗi cập nhật trạng thái vị trí kho:",
+        err
+      );
 
       setError(
         err.response?.data?.message ||
@@ -151,12 +185,6 @@ function WarehouseLocationListPage() {
       );
     }
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Badge trạng thái sức chứa
-  |--------------------------------------------------------------------------
-  */
 
   function getCapacityBadge(location) {
     if (location.capacity_status === "full") {
@@ -190,12 +218,6 @@ function WarehouseLocationListPage() {
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | Badge trạng thái hoạt động
-  |--------------------------------------------------------------------------
-  */
-
   function getStatusBadge(status) {
     if (status === "active") {
       return (
@@ -211,12 +233,6 @@ function WarehouseLocationListPage() {
       </span>
     );
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Màu progress bar theo trạng thái sức chứa
-  |--------------------------------------------------------------------------
-  */
 
   function getProgressBarClass(location) {
     if (location.capacity_status === "full") {
@@ -234,39 +250,53 @@ function WarehouseLocationListPage() {
     return "bg-secondary";
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | Format số
-  |--------------------------------------------------------------------------
-  */
-
   function formatNumber(value) {
-    return Number(value || 0).toLocaleString("vi-VN");
+    return Number(value || 0).toLocaleString(
+      "vi-VN"
+    );
   }
+
+  const tableColumnCount =
+    canManageLocation ? 11 : 10;
 
   return (
     <div>
-      {/* Tiêu đề */}
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
         <div>
           <h1 className="h4 mb-1">
-            Quản lý vị trí kho
+            {canManageLocation
+              ? "Quản lý vị trí kho"
+              : "Danh sách vị trí kho"}
           </h1>
 
           <p className="text-muted mb-0">
-            Theo dõi layout kho, sức chứa container và cảnh báo kho sắp đầy.
+            Theo dõi vị trí lưu trữ, sức chứa
+            container và cảnh báo vị trí sắp đầy.
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => navigate("/warehouse-locations/create")}
-        >
-          <i className="bi bi-plus-lg me-2" />
-          Thêm vị trí
-        </button>
+        {canManageLocation && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() =>
+              navigate(
+                "/warehouse-locations/create"
+              )
+            }
+          >
+            <i className="bi bi-plus-lg me-2" />
+            Thêm vị trí
+          </button>
+        )}
       </div>
+
+      {currentRole === "STAFF" && (
+        <div className="alert alert-info">
+          Bạn chỉ được xem và tra cứu vị trí kho,
+          không được thêm, sửa, khóa hoặc mở khóa vị trí.
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger">
@@ -274,7 +304,6 @@ function WarehouseLocationListPage() {
         </div>
       )}
 
-      {/* Bộ lọc */}
       <div className="card border-0 shadow-sm mb-4">
         <div className="card-body">
           <form onSubmit={handleSearch}>
@@ -393,7 +422,6 @@ function WarehouseLocationListPage() {
         </div>
       </div>
 
-      {/* Danh sách vị trí */}
       <div className="card border-0 shadow-sm">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -403,9 +431,7 @@ function WarehouseLocationListPage() {
 
             <div className="text-muted small">
               Tổng số vị trí:{" "}
-              <strong>
-                {locations.length}
-              </strong>
+              <strong>{locations.length}</strong>
             </div>
           </div>
 
@@ -423,7 +449,10 @@ function WarehouseLocationListPage() {
                   <th>Tỷ lệ dùng</th>
                   <th>Trạng thái sức chứa</th>
                   <th>Trạng thái</th>
-                  <th>Thao tác</th>
+
+                  {canManageLocation && (
+                    <th>Thao tác</th>
+                  )}
                 </tr>
               </thead>
 
@@ -431,20 +460,17 @@ function WarehouseLocationListPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="11"
+                      colSpan={tableColumnCount}
                       className="text-center text-muted py-5"
                     >
-                      <span
-                        className="spinner-border spinner-border-sm me-2"
-                        role="status"
-                      />
+                      <span className="spinner-border spinner-border-sm me-2" />
                       Đang tải vị trí kho...
                     </td>
                   </tr>
                 ) : locations.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="11"
+                      colSpan={tableColumnCount}
                       className="text-center text-muted py-5"
                     >
                       <i className="bi bi-grid-3x3-gap fs-2 d-block mb-2" />
@@ -454,7 +480,9 @@ function WarehouseLocationListPage() {
                 ) : (
                   locations.map((location, index) => {
                     const usedPercent = Math.min(
-                      Number(location.used_percent || 0),
+                      Number(
+                        location.used_percent || 0
+                      ),
                       100
                     );
 
@@ -464,14 +492,13 @@ function WarehouseLocationListPage() {
                         className={
                           location.capacity_status === "full"
                             ? "table-danger"
-                            : location.capacity_status === "warning"
+                            : location.capacity_status ===
+                                "warning"
                               ? "table-warning"
                               : ""
                         }
                       >
-                        <td>
-                          {index + 1}
-                        </td>
+                        <td>{index + 1}</td>
 
                         <td>
                           {location.warehouse_name}
@@ -487,31 +514,43 @@ function WarehouseLocationListPage() {
                           {location.location_name}
                         </td>
 
-                        <td>
+                        <td className="text-nowrap">
                           <strong>
-                            {formatNumber(location.max_containers)}
+                            {formatNumber(
+                              location.max_containers
+                            )}
                           </strong>{" "}
                           container
                         </td>
 
-                        <td>
-                          {formatNumber(location.used_containers)} container
+                        <td className="text-nowrap">
+                          {formatNumber(
+                            location.used_containers
+                          )}{" "}
+                          container
                         </td>
 
-                        <td>
-                          {formatNumber(location.available_containers)} container
+                        <td className="text-nowrap">
+                          {formatNumber(
+                            location.available_containers
+                          )}{" "}
+                          container
                         </td>
 
                         <td style={{ minWidth: "160px" }}>
                           <div className="d-flex justify-content-between small mb-1">
                             <span>
-                              {Number(location.used_percent || 0)}%
+                              {Number(
+                                location.used_percent || 0
+                              )}
+                              %
                             </span>
 
                             <span className="text-muted">
                               Cảnh báo{" "}
                               {Number(
-                                location.warning_threshold_percent || 0
+                                location.warning_threshold_percent ||
+                                  0
                               )}
                               %
                             </span>
@@ -540,33 +579,39 @@ function WarehouseLocationListPage() {
                           {getStatusBadge(location.status)}
                         </td>
 
-                        <td className="text-nowrap">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary me-2"
-                            onClick={() =>
-                              navigate(
-                                `/warehouse-locations/${location.id}/edit`
-                              )
-                            }
-                          >
-                            Sửa
-                          </button>
+                        {canManageLocation && (
+                          <td className="text-nowrap">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary me-2"
+                              onClick={() =>
+                                navigate(
+                                  `/warehouse-locations/${location.id}/edit`
+                                )
+                              }
+                            >
+                              Sửa
+                            </button>
 
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${
-                              location.status === "active"
-                                ? "btn-outline-danger"
-                                : "btn-outline-success"
-                            }`}
-                            onClick={() => handleToggleStatus(location)}
-                          >
-                            {location.status === "active"
-                              ? "Khóa"
-                              : "Mở khóa"}
-                          </button>
-                        </td>
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${
+                                location.status === "active"
+                                  ? "btn-outline-danger"
+                                  : "btn-outline-success"
+                              }`}
+                              onClick={() =>
+                                handleToggleStatus(
+                                  location
+                                )
+                              }
+                            >
+                              {location.status === "active"
+                                ? "Khóa"
+                                : "Mở khóa"}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -577,7 +622,9 @@ function WarehouseLocationListPage() {
 
           <div className="alert alert-info mb-0 mt-3">
             <strong>Ghi chú:</strong>{" "}
-            Sức chứa được tính theo số container. Khi nhập kho, hệ thống sẽ kiểm tra vị trí còn đủ container hay không. Nếu vị trí đạt ngưỡng cảnh báo, hệ thống sẽ báo trạng thái sắp đầy.
+            Sức chứa được tính theo số container.
+            Khi nhập kho, hệ thống kiểm tra vị trí còn
+            đủ sức chứa hay không.
           </div>
         </div>
       </div>

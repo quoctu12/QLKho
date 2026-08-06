@@ -14,35 +14,82 @@ const {
 
 const router = express.Router();
 
-// ADMIN và MANAGER và STAFF được xem nhà cung cấp
+/*
+|--------------------------------------------------------------------------
+| Lấy danh sách nhà cung cấp
+|--------------------------------------------------------------------------
+|
+| ADMIN, MANAGER và STAFF đều được xem.
+|
+*/
+
 router.get(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER", "STAFF"),
+  authorize(
+    "ADMIN",
+    "MANAGER",
+    "STAFF"
+  ),
   getAllSuppliers
 );
 
-// ADMIN và MANAGER được thêm nhà cung cấp
+/*
+|--------------------------------------------------------------------------
+| Thêm nhà cung cấp
+|--------------------------------------------------------------------------
+|
+| STAFF được thêm nhanh nhà cung cấp mới khi lập phiếu nhập.
+|
+*/
+
 router.post(
   "/",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER",
+    "STAFF"
+  ),
   createSupplier
 );
 
-// ADMIN và MANAGER được cập nhật nhà cung cấp
+/*
+|--------------------------------------------------------------------------
+| Cập nhật nhà cung cấp
+|--------------------------------------------------------------------------
+|
+| Chỉ ADMIN và MANAGER được sửa.
+|
+*/
+
 router.put(
   "/:id",
   authenticate,
-  authorize("ADMIN", "MANAGER"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   updateSupplier
 );
 
-// Chỉ ADMIN được xóa nhà cung cấp
+/*
+|--------------------------------------------------------------------------
+| Xóa nhà cung cấp
+|--------------------------------------------------------------------------
+|
+| ADMIN và MANAGER được xóa.
+| STAFF không được xóa.
+|
+*/
+
 router.delete(
   "/:id",
   authenticate,
-  authorize("ADMIN"),
+  authorize(
+    "ADMIN",
+    "MANAGER"
+  ),
   deleteSupplier
 );
 

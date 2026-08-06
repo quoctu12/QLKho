@@ -26,6 +26,7 @@ async function getInventoryBatches(req, res) {
       keyword,
       expiry_status,
       stock_status,
+      storage_status,
       sort_by = "priority",
     } = req.query;
 
@@ -37,7 +38,8 @@ async function getInventoryBatches(req, res) {
 
     if (
       paginationRequested &&
-      (!Number.isInteger(currentPage) || currentPage <= 0)
+      (!Number.isInteger(currentPage) ||
+        currentPage <= 0)
     ) {
       return res.status(400).json({
         success: false,
@@ -47,11 +49,9 @@ async function getInventoryBatches(req, res) {
 
     if (
       paginationRequested &&
-      (
-        !Number.isInteger(pageLimit) ||
+      (!Number.isInteger(pageLimit) ||
         pageLimit <= 0 ||
-        pageLimit > 100
-      )
+        pageLimit > 100)
     ) {
       return res.status(400).json({
         success: false,
@@ -64,10 +64,15 @@ async function getInventoryBatches(req, res) {
     const params = [];
 
     /*
-     * Lọc theo kho.
-     */
+    |--------------------------------------------------------------------------
+    | Lọc theo kho
+    |--------------------------------------------------------------------------
+    */
+
     if (warehouse_id) {
-      const warehouseId = Number(warehouse_id);
+      const warehouseId = Number(
+        warehouse_id
+      );
 
       if (
         !Number.isInteger(warehouseId) ||
@@ -79,15 +84,23 @@ async function getInventoryBatches(req, res) {
         });
       }
 
-      conditions.push("ib.warehouse_id = ?");
+      conditions.push(
+        "ib.warehouse_id = ?"
+      );
+
       params.push(warehouseId);
     }
 
     /*
-     * Lọc theo sản phẩm.
-     */
+    |--------------------------------------------------------------------------
+    | Lọc theo sản phẩm
+    |--------------------------------------------------------------------------
+    */
+
     if (product_id) {
-      const productId = Number(product_id);
+      const productId = Number(
+        product_id
+      );
 
       if (
         !Number.isInteger(productId) ||
@@ -95,21 +108,31 @@ async function getInventoryBatches(req, res) {
       ) {
         return res.status(400).json({
           success: false,
-          message: "Mã sản phẩm không hợp lệ.",
+          message:
+            "Mã sản phẩm không hợp lệ.",
         });
       }
 
-      conditions.push("ib.product_id = ?");
+      conditions.push(
+        "ib.product_id = ?"
+      );
+
       params.push(productId);
     }
 
     /*
-     * Tìm kiếm theo tên sản phẩm, SKU, mã lô, kho hoặc vị trí.
-     */
-    if (keyword?.trim()) {
-      const normalizedKeyword = keyword.trim();
+    |--------------------------------------------------------------------------
+    | Tìm kiếm
+    |--------------------------------------------------------------------------
+    */
 
-      if (normalizedKeyword.length > 100) {
+    if (keyword?.trim()) {
+      const normalizedKeyword =
+        keyword.trim();
+
+      if (
+        normalizedKeyword.length > 100
+      ) {
         return res.status(400).json({
           success: false,
           message:
@@ -125,12 +148,17 @@ async function getInventoryBatches(req, res) {
           OR w.name LIKE ?
           OR wl.location_code LIKE ?
           OR wl.location_name LIKE ?
+          OR wsp.policy_code LIKE ?
+          OR wsp.policy_name LIKE ?
         )
       `);
 
-      const searchValue = `%${normalizedKeyword}%`;
+      const searchValue =
+        `%${normalizedKeyword}%`;
 
       params.push(
+        searchValue,
+        searchValue,
         searchValue,
         searchValue,
         searchValue,
@@ -141,8 +169,11 @@ async function getInventoryBatches(req, res) {
     }
 
     /*
-     * Kiểm tra trạng thái hạn sử dụng.
-     */
+    |--------------------------------------------------------------------------
+    | Lọc theo hạn sử dụng
+    |--------------------------------------------------------------------------
+    */
+
     const allowedExpiryStatuses = [
       "expired",
       "expiring",
@@ -152,7 +183,9 @@ async function getInventoryBatches(req, res) {
 
     if (
       expiry_status &&
-      !allowedExpiryStatuses.includes(expiry_status)
+      !allowedExpiryStatuses.includes(
+        expiry_status
+      )
     ) {
       return res.status(400).json({
         success: false,
@@ -190,12 +223,17 @@ async function getInventoryBatches(req, res) {
     }
 
     if (expiry_status === "no_expiry") {
-      conditions.push("ib.expiry_date IS NULL");
+      conditions.push(
+        "ib.expiry_date IS NULL"
+      );
     }
 
     /*
-     * Kiểm tra trạng thái tồn kho.
-     */
+    |--------------------------------------------------------------------------
+    | Lọc theo mức tồn
+    |--------------------------------------------------------------------------
+    */
+
     const allowedStockStatuses = [
       "low_stock",
       "normal",
@@ -204,7 +242,9 @@ async function getInventoryBatches(req, res) {
 
     if (
       stock_status &&
-      !allowedStockStatuses.includes(stock_status)
+      !allowedStockStatuses.includes(
+        stock_status
+      )
     ) {
       return res.status(400).json({
         success: false,
@@ -213,43 +253,179 @@ async function getInventoryBatches(req, res) {
       });
     }
 
-    if (stock_status === "low_stock") {
+    if (
+      stock_status === "low_stock"
+    ) {
       conditions.push(`
         p.minimum_stock > 0
-        AND COALESCE(pt.total_quantity, 0) <= p.minimum_stock
+        AND COALESCE(
+          pt.total_quantity,
+          0
+        ) <= p.minimum_stock
       `);
     }
 
     if (stock_status === "normal") {
       conditions.push(`
         p.minimum_stock > 0
-        AND COALESCE(pt.total_quantity, 0) > p.minimum_stock
+        AND COALESCE(
+          pt.total_quantity,
+          0
+        ) > p.minimum_stock
       `);
     }
 
-    if (stock_status === "not_configured") {
+    if (
+      stock_status ===
+      "not_configured"
+    ) {
       conditions.push(`
-        COALESCE(p.minimum_stock, 0) <= 0
+        COALESCE(
+          p.minimum_stock,
+          0
+        ) <= 0
       `);
     }
-
-    const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
     /*
-     * Chỉ chấp nhận các kiểu sắp xếp cố định.
-     */
+    |--------------------------------------------------------------------------
+    | Lọc theo thời hạn lưu kho
+    |--------------------------------------------------------------------------
+    |
+    | normal:
+    |   Chưa bước vào khoảng cảnh báo.
+    |
+    | warning:
+    |   Còn từ 0 đến warning_days ngày.
+    |
+    | overdue:
+    |   Ngày hiện tại lớn hơn storage_due_date.
+    |
+    | no_policy:
+    |   Lô chưa có chính sách lưu kho.
+    |
+    */
+
+    const allowedStorageStatuses = [
+      "normal",
+      "warning",
+      "overdue",
+      "no_policy",
+    ];
+
+    if (
+      storage_status &&
+      !allowedStorageStatuses.includes(
+        storage_status
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Trạng thái thời hạn lưu kho không hợp lệ.",
+      });
+    }
+
+    if (
+      storage_status === "overdue"
+    ) {
+      conditions.push(`
+        ib.storage_due_date IS NOT NULL
+        AND ib.storage_due_date < CURDATE()
+      `);
+    }
+
+    if (
+      storage_status === "warning"
+    ) {
+      conditions.push(`
+        ib.storage_due_date IS NOT NULL
+        AND ib.storage_due_date >= CURDATE()
+        AND DATEDIFF(
+          ib.storage_due_date,
+          CURDATE()
+        ) <= COALESCE(
+          ib.warning_days,
+          0
+        )
+      `);
+    }
+
+    if (
+      storage_status === "normal"
+    ) {
+      conditions.push(`
+        ib.storage_due_date IS NOT NULL
+        AND ib.storage_due_date >= CURDATE()
+        AND DATEDIFF(
+          ib.storage_due_date,
+          CURDATE()
+        ) > COALESCE(
+          ib.warning_days,
+          0
+        )
+      `);
+    }
+
+    if (
+      storage_status === "no_policy"
+    ) {
+      conditions.push(`
+        (
+          ib.storage_policy_id IS NULL
+          OR ib.storage_due_date IS NULL
+        )
+      `);
+    }
+
+    const whereClause =
+      `WHERE ${conditions.join(
+        " AND "
+      )}`;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sắp xếp
+    |--------------------------------------------------------------------------
+    */
+
     const allowedSortOptions = {
       priority: `
         CASE
-          WHEN p.minimum_stock > 0
-            AND COALESCE(pt.total_quantity, 0) <= p.minimum_stock
+          WHEN ib.storage_policy_id IS NULL
+            OR ib.storage_due_date IS NULL
             THEN 0
+
+          WHEN ib.storage_due_date < CURDATE()
+            THEN 1
+
+          WHEN DATEDIFF(
+            ib.storage_due_date,
+            CURDATE()
+          ) <= COALESCE(
+            ib.warning_days,
+            0
+          )
+            THEN 2
+
+          ELSE 3
+        END ASC,
+
+        CASE
+          WHEN p.minimum_stock > 0
+            AND COALESCE(
+              pt.total_quantity,
+              0
+            ) <= p.minimum_stock
+            THEN 0
+
           ELSE 1
         END ASC,
 
         CASE
           WHEN ib.expiry_date IS NULL
             THEN 1
+
           ELSE 0
         END ASC,
 
@@ -258,10 +434,35 @@ async function getInventoryBatches(req, res) {
         ib.id ASC
       `,
 
+      storage_due_asc: `
+        CASE
+          WHEN ib.storage_due_date IS NULL
+            THEN 1
+
+          ELSE 0
+        END ASC,
+
+        ib.storage_due_date ASC,
+        ib.id ASC
+      `,
+
+      storage_due_desc: `
+        CASE
+          WHEN ib.storage_due_date IS NULL
+            THEN 1
+
+          ELSE 0
+        END ASC,
+
+        ib.storage_due_date DESC,
+        ib.id DESC
+      `,
+
       expiry_asc: `
         CASE
           WHEN ib.expiry_date IS NULL
             THEN 1
+
           ELSE 0
         END ASC,
 
@@ -273,6 +474,7 @@ async function getInventoryBatches(req, res) {
         CASE
           WHEN ib.expiry_date IS NULL
             THEN 1
+
           ELSE 0
         END ASC,
 
@@ -290,27 +492,29 @@ async function getInventoryBatches(req, res) {
         ib.id ASC
       `,
 
-      newest: `
-        ib.id DESC
-      `,
-
-      oldest: `
-        ib.id ASC
-      `,
+      newest: "ib.id DESC",
+      oldest: "ib.id ASC",
     };
 
-    if (!allowedSortOptions[sort_by]) {
+    if (
+      !allowedSortOptions[sort_by]
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Kiểu sắp xếp không hợp lệ.",
+        message:
+          "Kiểu sắp xếp không hợp lệ.",
       });
     }
 
-    const orderClause = allowedSortOptions[sort_by];
+    const orderClause =
+      allowedSortOptions[sort_by];
 
     /*
-     * Phần JOIN dùng chung cho câu đếm và câu lấy dữ liệu.
-     */
+    |--------------------------------------------------------------------------
+    | JOIN dùng chung
+    |--------------------------------------------------------------------------
+    */
+
     const commonFromClause = `
       FROM inventory_batches ib
 
@@ -322,6 +526,9 @@ async function getInventoryBatches(req, res) {
 
       LEFT JOIN warehouse_locations wl
         ON ib.location_id = wl.id
+
+      LEFT JOIN warehouse_storage_policies wsp
+        ON ib.storage_policy_id = wsp.id
 
       LEFT JOIN (
         SELECT
@@ -345,37 +552,51 @@ async function getInventoryBatches(req, res) {
     let totalPages = 1;
     let safeCurrentPage = 1;
     let paginationClause = "";
-    let queryParams = [...params];
+    let queryParams = [
+      ...params,
+    ];
 
     /*
-     * Chỉ đếm và thêm LIMIT/OFFSET khi có yêu cầu phân trang.
-     */
+    |--------------------------------------------------------------------------
+    | Phân trang
+    |--------------------------------------------------------------------------
+    */
+
     if (paginationRequested) {
-      const [countRows] = await pool.query(
-        `
-          SELECT COUNT(*) AS total_items
+      const [countRows] =
+        await pool.query(
+          `
+            SELECT
+              COUNT(*) AS total_items
 
-          ${commonFromClause}
+            ${commonFromClause}
 
-          ${whereClause}
-        `,
-        params
+            ${whereClause}
+          `,
+          params
+        );
+
+      totalItems = Number(
+        countRows[0]
+          ?.total_items || 0
       );
-
-      totalItems = Number(countRows[0]?.total_items || 0);
 
       totalPages = Math.max(
         1,
-        Math.ceil(totalItems / pageLimit)
+        Math.ceil(
+          totalItems / pageLimit
+        )
       );
 
-      safeCurrentPage = Math.min(
-        currentPage,
-        totalPages
-      );
+      safeCurrentPage =
+        Math.min(
+          currentPage,
+          totalPages
+        );
 
       const offset =
-        (safeCurrentPage - 1) * pageLimit;
+        (safeCurrentPage - 1) *
+        pageLimit;
 
       paginationClause = `
         LIMIT ?
@@ -389,134 +610,399 @@ async function getInventoryBatches(req, res) {
       ];
     }
 
-    const [rows] = await pool.query(
-      `
-        SELECT
-          ib.id,
-          ib.product_id,
-          p.name AS product_name,
-          p.sku,
-          p.minimum_stock,
+    /*
+    |--------------------------------------------------------------------------
+    | Lấy dữ liệu tồn kho
+    |--------------------------------------------------------------------------
+    */
 
-          COALESCE(
-            pt.total_quantity,
-            0
-          ) AS total_product_quantity,
+    const [rows] =
+      await pool.query(
+        `
+          SELECT
+            ib.id,
+            ib.product_id,
+            p.name AS product_name,
+            p.sku,
+            p.minimum_stock,
 
-          CASE
-            WHEN COALESCE(p.minimum_stock, 0) <= 0
-              THEN 0
+            COALESCE(
+              pt.total_quantity,
+              0
+            ) AS total_product_quantity,
 
-            WHEN COALESCE(pt.total_quantity, 0) <= p.minimum_stock
-              THEN 1
+            CASE
+              WHEN COALESCE(
+                p.minimum_stock,
+                0
+              ) <= 0
+                THEN 0
 
-            ELSE 0
-          END AS is_low_stock,
+              WHEN COALESCE(
+                pt.total_quantity,
+                0
+              ) <= p.minimum_stock
+                THEN 1
 
-          CASE
-            WHEN COALESCE(p.minimum_stock, 0) <= 0
-              THEN 'not_configured'
+              ELSE 0
+            END AS is_low_stock,
 
-            WHEN COALESCE(pt.total_quantity, 0) <= p.minimum_stock
-              THEN 'low_stock'
+            CASE
+              WHEN COALESCE(
+                p.minimum_stock,
+                0
+              ) <= 0
+                THEN 'not_configured'
 
-            ELSE 'normal'
-          END AS stock_status,
+              WHEN COALESCE(
+                pt.total_quantity,
+                0
+              ) <= p.minimum_stock
+                THEN 'low_stock'
 
-          ib.warehouse_id,
-          w.name AS warehouse_name,
+              ELSE 'normal'
+            END AS stock_status,
 
-          ib.location_id,
-          wl.location_code,
-          wl.location_name,
-          wl.max_containers AS location_max_containers,
-          wl.warning_threshold_percent AS location_warning_threshold_percent,
+            ib.warehouse_id,
+            w.name AS warehouse_name,
 
-          ib.batch_code,
-          ib.quantity,
-          ib.container_quantity,
-          ib.import_date,
-          ib.expiry_date,
-          ib.cost_price,
+            ib.location_id,
+            wl.location_code,
+            wl.location_name,
 
-          COALESCE(
-            ib.quantity * ib.cost_price,
-            0
-          ) AS inventory_value,
+            wl.max_containers
+              AS location_max_containers,
 
-          CASE
-            WHEN ib.expiry_date IS NULL
-              THEN 'no_expiry'
+            wl.warning_threshold_percent
+              AS location_warning_threshold_percent,
 
-            WHEN ib.expiry_date < CURDATE()
-              THEN 'expired'
+            ib.batch_code,
+            ib.quantity,
+            ib.container_quantity,
+            ib.base_quantity_per_container,
 
-            WHEN ib.expiry_date <= DATE_ADD(
-              CURDATE(),
-              INTERVAL 30 DAY
-            )
-              THEN 'expiring'
+            ib.storage_pricing_id,
+            ib.storage_unit_price,
 
-            ELSE 'valid'
-          END AS expiry_status,
+            ib.storage_policy_id,
+            wsp.policy_code,
+            wsp.policy_name,
 
-          CASE
-            WHEN ib.expiry_date IS NULL
-              THEN NULL
+            ib.max_storage_days,
+            ib.warning_days,
+            ib.overdue_multiplier,
+            ib.storage_due_date,
 
-            ELSE DATEDIFF(
-              ib.expiry_date,
-              CURDATE()
-            )
-          END AS days_until_expiry
+            ib.allow_overdue_export,
+            ib.require_overdue_note,
 
-        ${commonFromClause}
+            CASE
+              WHEN ib.base_quantity_per_container > 0
+                THEN CEIL(
+                  ib.quantity /
+                  ib.base_quantity_per_container
+                )
 
-        ${whereClause}
+              ELSE 0
+            END AS expected_container_quantity,
 
-        ORDER BY ${orderClause}
+            CASE
+              WHEN ib.base_quantity_per_container > 0
+                AND ib.container_quantity = CEIL(
+                  ib.quantity /
+                  ib.base_quantity_per_container
+                )
+                THEN 1
 
-        ${paginationClause}
-      `,
-      queryParams
-    );
+              ELSE 0
+            END AS is_container_consistent,
 
-    const formattedRows = rows.map((row) => ({
-      ...row,
+            ib.import_date,
+            ib.expiry_date,
 
-      minimum_stock: Number(row.minimum_stock || 0),
+            CASE
+              WHEN ib.expiry_date IS NULL
+                THEN 'no_expiry'
 
-      total_product_quantity: Number(
-        row.total_product_quantity || 0
-      ),
+              WHEN ib.expiry_date < CURDATE()
+                THEN 'expired'
 
-      is_low_stock: Boolean(Number(row.is_low_stock)),
+              WHEN ib.expiry_date <= DATE_ADD(
+                CURDATE(),
+                INTERVAL 30 DAY
+              )
+                THEN 'expiring'
 
-      quantity: Number(row.quantity || 0),
+              ELSE 'valid'
+            END AS expiry_status,
 
-      container_quantity: Number(row.container_quantity || 0),
+            CASE
+              WHEN ib.expiry_date IS NULL
+                THEN NULL
 
-      location_max_containers: Number(
-        row.location_max_containers || 0
-      ),
+              ELSE DATEDIFF(
+                ib.expiry_date,
+                CURDATE()
+              )
+            END AS days_until_expiry,
 
-      location_warning_threshold_percent: Number(
-        row.location_warning_threshold_percent || 0
-      ),
+            CASE
+              WHEN ib.storage_policy_id IS NULL
+                OR ib.storage_due_date IS NULL
+                THEN 'no_policy'
 
-      cost_price: Number(row.cost_price || 0),
+              WHEN ib.storage_due_date < CURDATE()
+                THEN 'overdue'
 
-      inventory_value: Number(row.inventory_value || 0),
+              WHEN DATEDIFF(
+                ib.storage_due_date,
+                CURDATE()
+              ) <= COALESCE(
+                ib.warning_days,
+                0
+              )
+                THEN 'warning'
 
-      days_until_expiry:
-        row.days_until_expiry === null
-          ? null
-          : Number(row.days_until_expiry),
-    }));
+              ELSE 'normal'
+            END AS storage_status,
+
+            CASE
+              WHEN ib.storage_due_date IS NULL
+                THEN NULL
+
+              ELSE DATEDIFF(
+                ib.storage_due_date,
+                CURDATE()
+              )
+            END AS days_until_storage_due,
+
+            CASE
+              WHEN ib.storage_due_date IS NULL
+                THEN 0
+
+              ELSE GREATEST(
+                DATEDIFF(
+                  CURDATE(),
+                  ib.storage_due_date
+                ),
+                0
+              )
+            END AS overdue_storage_days,
+
+            CASE
+              WHEN ib.storage_due_date IS NOT NULL
+                AND ib.storage_due_date < CURDATE()
+                THEN 1
+
+              ELSE 0
+            END AS is_storage_overdue,
+
+            CASE
+              WHEN ib.storage_due_date IS NOT NULL
+                AND ib.storage_due_date >= CURDATE()
+                AND DATEDIFF(
+                  ib.storage_due_date,
+                  CURDATE()
+                ) <= COALESCE(
+                  ib.warning_days,
+                  0
+                )
+                THEN 1
+
+              ELSE 0
+            END AS is_storage_warning
+
+          ${commonFromClause}
+
+          ${whereClause}
+
+          ORDER BY
+            ${orderClause}
+
+          ${paginationClause}
+        `,
+        queryParams
+      );
 
     /*
-     * Không phân trang: giữ cấu trúc mảng cũ.
-     */
+    |--------------------------------------------------------------------------
+    | Chuẩn hóa kiểu dữ liệu
+    |--------------------------------------------------------------------------
+    */
+
+    const formattedRows =
+      rows.map((row) => ({
+        ...row,
+
+        minimum_stock: Number(
+          row.minimum_stock || 0
+        ),
+
+        total_product_quantity:
+          Number(
+            row.total_product_quantity ||
+              0
+          ),
+
+        is_low_stock:
+          Boolean(
+            Number(
+              row.is_low_stock
+            )
+          ),
+
+        quantity: Number(
+          row.quantity || 0
+        ),
+
+        container_quantity:
+          Number(
+            row.container_quantity ||
+              0
+          ),
+
+        base_quantity_per_container:
+          Number(
+            row.base_quantity_per_container ||
+              0
+          ),
+
+        expected_container_quantity:
+          Number(
+            row.expected_container_quantity ||
+              0
+          ),
+
+        is_container_consistent:
+          Boolean(
+            Number(
+              row.is_container_consistent
+            )
+          ),
+
+        storage_pricing_id:
+          row.storage_pricing_id ==
+          null
+            ? null
+            : Number(
+                row.storage_pricing_id
+              ),
+
+        storage_unit_price:
+          row.storage_unit_price ==
+          null
+            ? null
+            : Number(
+                row.storage_unit_price
+              ),
+
+        storage_policy_id:
+          row.storage_policy_id ==
+          null
+            ? null
+            : Number(
+                row.storage_policy_id
+              ),
+
+        max_storage_days:
+          row.max_storage_days ==
+          null
+            ? null
+            : Number(
+                row.max_storage_days
+              ),
+
+        warning_days:
+          row.warning_days ==
+          null
+            ? null
+            : Number(
+                row.warning_days
+              ),
+
+        overdue_multiplier:
+          row.overdue_multiplier ==
+          null
+            ? null
+            : Number(
+                row.overdue_multiplier
+              ),
+
+        allow_overdue_export:
+          row.allow_overdue_export ==
+          null
+            ? null
+            : Boolean(
+                Number(
+                  row.allow_overdue_export
+                )
+              ),
+
+        require_overdue_note:
+          row.require_overdue_note ==
+          null
+            ? null
+            : Boolean(
+                Number(
+                  row.require_overdue_note
+                )
+              ),
+
+        days_until_storage_due:
+          row.days_until_storage_due ==
+          null
+            ? null
+            : Number(
+                row.days_until_storage_due
+              ),
+
+        overdue_storage_days:
+          Number(
+            row.overdue_storage_days ||
+              0
+          ),
+
+        is_storage_overdue:
+          Boolean(
+            Number(
+              row.is_storage_overdue
+            )
+          ),
+
+        is_storage_warning:
+          Boolean(
+            Number(
+              row.is_storage_warning
+            )
+          ),
+
+        location_max_containers:
+          Number(
+            row.location_max_containers ||
+              0
+          ),
+
+        location_warning_threshold_percent:
+          Number(
+            row.location_warning_threshold_percent ||
+              0
+          ),
+
+        days_until_expiry:
+          row.days_until_expiry ==
+          null
+            ? null
+            : Number(
+                row.days_until_expiry
+              ),
+      }));
+
+    /*
+    |--------------------------------------------------------------------------
+    | Không phân trang
+    |--------------------------------------------------------------------------
+    */
+
     if (!paginationRequested) {
       return res.status(200).json({
         success: true,
@@ -525,8 +1011,11 @@ async function getInventoryBatches(req, res) {
     }
 
     /*
-     * Có phân trang: trả object gồm dữ liệu và thông tin trang.
-     */
+    |--------------------------------------------------------------------------
+    | Có phân trang
+    |--------------------------------------------------------------------------
+    */
+
     return res.status(200).json({
       success: true,
 
@@ -538,19 +1027,26 @@ async function getInventoryBatches(req, res) {
           limit: pageLimit,
           total_items: totalItems,
           total_pages: totalPages,
+
           has_previous_page:
             safeCurrentPage > 1,
+
           has_next_page:
-            safeCurrentPage < totalPages,
+            safeCurrentPage <
+            totalPages,
         },
       },
     });
   } catch (error) {
-    console.error("Lỗi lấy tồn kho theo lô:", error);
+    console.error(
+      "Lỗi lấy tồn kho theo lô:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Không thể lấy dữ liệu tồn kho.",
+      message:
+        "Không thể lấy dữ liệu tồn kho.",
     });
   }
 }
@@ -561,128 +1057,224 @@ async function getInventoryBatches(req, res) {
 |--------------------------------------------------------------------------
 */
 
-async function getInventorySummary(req, res) {
+async function getInventorySummary(
+  req,
+  res
+) {
   try {
-    const [rows] = await pool.query(`
-      SELECT
-        COUNT(*) AS total_batches,
+    const [rows] =
+      await pool.query(`
+        SELECT
+          COUNT(*) AS total_batches,
 
-        COUNT(
-          DISTINCT ib.product_id
-        ) AS total_products,
+          COUNT(
+            DISTINCT ib.product_id
+          ) AS total_products,
 
-        COALESCE(
-          SUM(ib.quantity),
-          0
-        ) AS total_quantity,
+          COALESCE(
+            SUM(ib.quantity),
+            0
+          ) AS total_quantity,
 
-        COALESCE(
-          SUM(ib.container_quantity),
-          0
-        ) AS total_containers,
+          COALESCE(
+            SUM(
+              ib.container_quantity
+            ),
+            0
+          ) AS total_containers,
 
-        COALESCE(
-          SUM(
-            ib.quantity *
-            COALESCE(ib.cost_price, 0)
-          ),
-          0
-        ) AS total_inventory_value,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN ib.expiry_date IS NOT NULL
+                  AND ib.expiry_date < CURDATE()
+                THEN 1
 
-        COALESCE(
-          SUM(
-            CASE
-              WHEN ib.expiry_date IS NOT NULL
-                AND ib.expiry_date < CURDATE()
-              THEN 1
-              ELSE 0
-            END
-          ),
-          0
-        ) AS expired_batches,
+                ELSE 0
+              END
+            ),
+            0
+          ) AS expired_batches,
 
-        COALESCE(
-          SUM(
-            CASE
-              WHEN ib.expiry_date IS NOT NULL
-                AND ib.expiry_date >= CURDATE()
-                AND ib.expiry_date <= DATE_ADD(
-                  CURDATE(),
-                  INTERVAL 30 DAY
-                )
-              THEN 1
-              ELSE 0
-            END
-          ),
-          0
-        ) AS expiring_batches,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN ib.expiry_date IS NOT NULL
+                  AND ib.expiry_date >= CURDATE()
+                  AND ib.expiry_date <= DATE_ADD(
+                    CURDATE(),
+                    INTERVAL 30 DAY
+                  )
+                THEN 1
 
-        (
-          SELECT COUNT(*)
+                ELSE 0
+              END
+            ),
+            0
+          ) AS expiring_batches,
 
-          FROM products p
+          COALESCE(
+            SUM(
+              CASE
+                WHEN ib.storage_due_date IS NOT NULL
+                  AND ib.storage_due_date < CURDATE()
+                THEN 1
 
-          LEFT JOIN (
+                ELSE 0
+              END
+            ),
+            0
+          ) AS overdue_storage_batches,
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN ib.storage_due_date IS NOT NULL
+                  AND ib.storage_due_date >= CURDATE()
+                  AND DATEDIFF(
+                    ib.storage_due_date,
+                    CURDATE()
+                  ) <= COALESCE(
+                    ib.warning_days,
+                    0
+                  )
+                THEN 1
+
+                ELSE 0
+              END
+            ),
+            0
+          ) AS storage_warning_batches,
+
+          COALESCE(
+            SUM(
+              CASE
+                WHEN ib.storage_policy_id IS NULL
+                  OR ib.storage_due_date IS NULL
+                THEN 1
+
+                ELSE 0
+              END
+            ),
+            0
+          ) AS no_storage_policy_batches,
+
+          (
             SELECT
-              product_id,
-              COALESCE(
-                SUM(quantity),
+              COUNT(*)
+
+            FROM products p
+
+            LEFT JOIN (
+              SELECT
+                product_id,
+
+                COALESCE(
+                  SUM(quantity),
+                  0
+                ) AS total_quantity
+
+              FROM inventory_batches
+
+              WHERE quantity > 0
+
+              GROUP BY
+                product_id
+            ) product_inventory
+              ON product_inventory.product_id =
+                p.id
+
+            WHERE p.status = 'active'
+              AND p.minimum_stock > 0
+              AND COALESCE(
+                product_inventory.total_quantity,
                 0
-              ) AS total_quantity
+              ) <= p.minimum_stock
+          ) AS low_stock_products
 
-            FROM inventory_batches
+        FROM inventory_batches ib
 
-            WHERE quantity > 0
+        WHERE ib.quantity > 0
+      `);
 
-            GROUP BY product_id
-          ) product_inventory
-            ON product_inventory.product_id = p.id
-
-          WHERE p.status = 'active'
-            AND p.minimum_stock > 0
-            AND COALESCE(
-              product_inventory.total_quantity,
-              0
-            ) <= p.minimum_stock
-        ) AS low_stock_products
-
-      FROM inventory_batches ib
-
-      WHERE ib.quantity > 0
-    `);
-
-    const summary = rows[0] || {};
+    const summary =
+      rows[0] || {};
 
     return res.status(200).json({
       success: true,
+
       data: {
-        total_batches: Number(summary.total_batches || 0),
+        total_batches:
+          Number(
+            summary.total_batches ||
+              0
+          ),
 
-        total_products: Number(summary.total_products || 0),
+        total_products:
+          Number(
+            summary.total_products ||
+              0
+          ),
 
-        total_quantity: Number(summary.total_quantity || 0),
+        total_quantity:
+          Number(
+            summary.total_quantity ||
+              0
+          ),
 
-        total_containers: Number(summary.total_containers || 0),
+        total_containers:
+          Number(
+            summary.total_containers ||
+              0
+          ),
 
-        total_inventory_value: Number(
-          summary.total_inventory_value || 0
-        ),
+        expired_batches:
+          Number(
+            summary.expired_batches ||
+              0
+          ),
 
-        expired_batches: Number(summary.expired_batches || 0),
+        expiring_batches:
+          Number(
+            summary.expiring_batches ||
+              0
+          ),
 
-        expiring_batches: Number(summary.expiring_batches || 0),
+        overdue_storage_batches:
+          Number(
+            summary.overdue_storage_batches ||
+              0
+          ),
 
-        low_stock_products: Number(
-          summary.low_stock_products || 0
-        ),
+        storage_warning_batches:
+          Number(
+            summary.storage_warning_batches ||
+              0
+          ),
+
+        no_storage_policy_batches:
+          Number(
+            summary.no_storage_policy_batches ||
+              0
+          ),
+
+        low_stock_products:
+          Number(
+            summary.low_stock_products ||
+              0
+          ),
       },
     });
   } catch (error) {
-    console.error("Lỗi lấy tổng quan tồn kho:", error);
+    console.error(
+      "Lỗi lấy tổng quan tồn kho:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Không thể lấy tổng quan tồn kho.",
+      message:
+        "Không thể lấy tổng quan tồn kho.",
     });
   }
 }
@@ -693,7 +1285,10 @@ async function getInventorySummary(req, res) {
 |--------------------------------------------------------------------------
 */
 
-async function getInventoryByProduct(req, res) {
+async function getInventoryByProduct(
+  req,
+  res
+) {
   try {
     const {
       keyword,
@@ -704,15 +1299,22 @@ async function getInventoryByProduct(req, res) {
     const params = [];
 
     /*
-     * Tìm theo tên hoặc SKU.
-     */
-    if (keyword?.trim()) {
-      const normalizedKeyword = keyword.trim();
+    |--------------------------------------------------------------------------
+    | Tìm kiếm
+    |--------------------------------------------------------------------------
+    */
 
-      if (normalizedKeyword.length > 100) {
+    if (keyword?.trim()) {
+      const normalizedKeyword =
+        keyword.trim();
+
+      if (
+        normalizedKeyword.length > 100
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Từ khóa tìm kiếm không được vượt quá 100 ký tự.",
+          message:
+            "Từ khóa tìm kiếm không được vượt quá 100 ký tự.",
         });
       }
 
@@ -723,14 +1325,21 @@ async function getInventoryByProduct(req, res) {
         )
       `);
 
-      const searchValue = `%${normalizedKeyword}%`;
+      const searchValue =
+        `%${normalizedKeyword}%`;
 
-      params.push(searchValue, searchValue);
+      params.push(
+        searchValue,
+        searchValue
+      );
     }
 
     /*
-     * Kiểm tra trạng thái tồn kho.
-     */
+    |--------------------------------------------------------------------------
+    | Trạng thái tồn kho
+    |--------------------------------------------------------------------------
+    */
+
     const allowedStockStatuses = [
       "low_stock",
       "normal",
@@ -739,135 +1348,233 @@ async function getInventoryByProduct(req, res) {
 
     if (
       stock_status &&
-      !allowedStockStatuses.includes(stock_status)
+      !allowedStockStatuses.includes(
+        stock_status
+      )
     ) {
       return res.status(400).json({
         success: false,
-        message: "Trạng thái tồn kho không hợp lệ.",
+        message:
+          "Trạng thái tồn kho không hợp lệ.",
       });
     }
 
-    /*
-     * Dùng HAVING vì tổng tồn được tính bằng SUM.
-     */
     const havingConditions = [];
 
-    if (stock_status === "low_stock") {
+    if (
+      stock_status === "low_stock"
+    ) {
       havingConditions.push(`
         p.minimum_stock > 0
-        AND COALESCE(SUM(ib.quantity), 0) <= p.minimum_stock
+        AND COALESCE(
+          SUM(ib.quantity),
+          0
+        ) <= p.minimum_stock
       `);
     }
 
     if (stock_status === "normal") {
       havingConditions.push(`
         p.minimum_stock > 0
-        AND COALESCE(SUM(ib.quantity), 0) > p.minimum_stock
+        AND COALESCE(
+          SUM(ib.quantity),
+          0
+        ) > p.minimum_stock
       `);
     }
 
-    if (stock_status === "not_configured") {
+    if (
+      stock_status ===
+      "not_configured"
+    ) {
       havingConditions.push(`
-        COALESCE(p.minimum_stock, 0) <= 0
+        COALESCE(
+          p.minimum_stock,
+          0
+        ) <= 0
       `);
     }
 
     const whereClause =
       conditions.length > 0
-        ? `WHERE ${conditions.join(" AND ")}`
+        ? `WHERE ${conditions.join(
+            " AND "
+          )}`
         : "";
 
     const havingClause =
       havingConditions.length > 0
-        ? `HAVING ${havingConditions.join(" AND ")}`
+        ? `HAVING ${havingConditions.join(
+            " AND "
+          )}`
         : "";
 
-    const [rows] = await pool.query(
-      `
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.sku,
-          p.minimum_stock,
-          p.status,
+    /*
+    |--------------------------------------------------------------------------
+    | Lấy tồn theo sản phẩm
+    |--------------------------------------------------------------------------
+    */
 
-          COALESCE(
-            SUM(ib.quantity),
-            0
-          ) AS total_quantity,
+    const [rows] =
+      await pool.query(
+        `
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            p.sku,
+            p.minimum_stock,
+            p.status,
 
-          COALESCE(
-            SUM(
-              ib.quantity *
-              COALESCE(ib.cost_price, 0)
-            ),
-            0
-          ) AS total_inventory_value,
+            COALESCE(
+              SUM(ib.quantity),
+              0
+            ) AS total_quantity,
 
-          COUNT(ib.id) AS total_batches,
+            COUNT(
+              ib.id
+            ) AS total_batches,
 
-          CASE
-            WHEN COALESCE(p.minimum_stock, 0) <= 0
-              THEN 0
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN ib.storage_due_date IS NOT NULL
+                    AND ib.storage_due_date < CURDATE()
+                  THEN 1
 
-            WHEN COALESCE(SUM(ib.quantity), 0) <= p.minimum_stock
-              THEN 1
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS overdue_storage_batches,
 
-            ELSE 0
-          END AS is_low_stock,
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN ib.storage_due_date IS NOT NULL
+                    AND ib.storage_due_date >= CURDATE()
+                    AND DATEDIFF(
+                      ib.storage_due_date,
+                      CURDATE()
+                    ) <= COALESCE(
+                      ib.warning_days,
+                      0
+                    )
+                  THEN 1
 
-          CASE
-            WHEN COALESCE(p.minimum_stock, 0) <= 0
-              THEN 'not_configured'
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS storage_warning_batches,
 
-            WHEN COALESCE(SUM(ib.quantity), 0) <= p.minimum_stock
-              THEN 'low_stock'
+            CASE
+              WHEN COALESCE(
+                p.minimum_stock,
+                0
+              ) <= 0
+                THEN 0
 
-            ELSE 'normal'
-          END AS stock_status
+              WHEN COALESCE(
+                SUM(ib.quantity),
+                0
+              ) <= p.minimum_stock
+                THEN 1
 
-        FROM products p
+              ELSE 0
+            END AS is_low_stock,
 
-        LEFT JOIN inventory_batches ib
-          ON p.id = ib.product_id
-          AND ib.quantity > 0
+            CASE
+              WHEN COALESCE(
+                p.minimum_stock,
+                0
+              ) <= 0
+                THEN 'not_configured'
 
-        ${whereClause}
+              WHEN COALESCE(
+                SUM(ib.quantity),
+                0
+              ) <= p.minimum_stock
+                THEN 'low_stock'
 
-        GROUP BY
-          p.id,
-          p.name,
-          p.sku,
-          p.minimum_stock,
-          p.status
+              ELSE 'normal'
+            END AS stock_status
 
-        ${havingClause}
+          FROM products p
 
-        ORDER BY
-          CASE
-            WHEN p.minimum_stock > 0
-              AND COALESCE(SUM(ib.quantity), 0) <= p.minimum_stock
-              THEN 0
+          LEFT JOIN inventory_batches ib
+            ON p.id = ib.product_id
+            AND ib.quantity > 0
 
-            ELSE 1
-          END,
+          ${whereClause}
 
-          p.name ASC,
-          p.id ASC
-      `,
-      params
-    );
+          GROUP BY
+            p.id,
+            p.name,
+            p.sku,
+            p.minimum_stock,
+            p.status
 
-    const formattedRows = rows.map((row) => ({
-      ...row,
-      minimum_stock: Number(row.minimum_stock || 0),
-      total_quantity: Number(row.total_quantity || 0),
-      total_inventory_value: Number(
-        row.total_inventory_value || 0
-      ),
-      total_batches: Number(row.total_batches || 0),
-      is_low_stock: Boolean(Number(row.is_low_stock)),
-    }));
+          ${havingClause}
+
+          ORDER BY
+            CASE
+              WHEN p.minimum_stock > 0
+                AND COALESCE(
+                  SUM(ib.quantity),
+                  0
+                ) <= p.minimum_stock
+                THEN 0
+
+              ELSE 1
+            END,
+
+            p.name ASC,
+            p.id ASC
+        `,
+        params
+      );
+
+    const formattedRows =
+      rows.map((row) => ({
+        ...row,
+
+        minimum_stock:
+          Number(
+            row.minimum_stock ||
+              0
+          ),
+
+        total_quantity:
+          Number(
+            row.total_quantity ||
+              0
+          ),
+
+        total_batches:
+          Number(
+            row.total_batches ||
+              0
+          ),
+
+        overdue_storage_batches:
+          Number(
+            row.overdue_storage_batches ||
+              0
+          ),
+
+        storage_warning_batches:
+          Number(
+            row.storage_warning_batches ||
+              0
+          ),
+
+        is_low_stock:
+          Boolean(
+            Number(
+              row.is_low_stock
+            )
+          ),
+      }));
 
     return res.status(200).json({
       success: true,
@@ -881,7 +1588,8 @@ async function getInventoryByProduct(req, res) {
 
     return res.status(500).json({
       success: false,
-      message: "Không thể lấy dữ liệu tồn kho theo sản phẩm.",
+      message:
+        "Không thể lấy dữ liệu tồn kho theo sản phẩm.",
     });
   }
 }

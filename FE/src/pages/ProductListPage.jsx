@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -8,12 +13,6 @@ import {
 
 import { getCategories } from "../api/categoryApi";
 import { useAuth } from "../contexts/AuthContext";
-
-/*
-|--------------------------------------------------------------------------
-| Ảnh mặc định khi sản phẩm chưa có ảnh
-|--------------------------------------------------------------------------
-*/
 
 const PLACEHOLDER_IMAGE =
   "data:image/svg+xml;charset=UTF-8," +
@@ -30,47 +29,81 @@ function ProductListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const currentRole = String(
+    user?.role || ""
+  ).toUpperCase();
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  const [
+    loadingCategories,
+    setLoadingCategories,
+  ] = useState(true);
+
   const [error, setError] = useState("");
 
-  /*
-   * keyword là giá trị người dùng đang nhập.
-   * debouncedKeyword là giá trị dùng để gọi API sau 400ms.
-   */
   const [keyword, setKeyword] = useState("");
-  const [debouncedKeyword, setDebouncedKeyword] = useState("");
 
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sortBy, setSortBy] = useState("newest");
-  const [pageSize, setPageSize] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [
+    debouncedKeyword,
+    setDebouncedKeyword,
+  ] = useState("");
 
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    total_items: 0,
-    total_pages: 1,
-    has_previous_page: false,
-    has_next_page: false,
-  });
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] = useState("");
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState("");
+
+  const [sortBy, setSortBy] =
+    useState("newest");
+
+  const [pageSize, setPageSize] =
+    useState(10);
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] = useState(1);
+
+  const [pagination, setPagination] =
+    useState({
+      page: 1,
+      limit: 10,
+      total_items: 0,
+      total_pages: 1,
+      has_previous_page: false,
+      has_next_page: false,
+    });
 
   /*
-   * ADMIN và MANAGER được thêm, sửa sản phẩm.
-   */
-  const canManageProduct = [
+  |--------------------------------------------------------------------------
+  | Phân quyền
+  |--------------------------------------------------------------------------
+  */
+
+  const canCreateProduct = [
     "ADMIN",
     "MANAGER",
-  ].includes(user?.role);
+    "STAFF",
+  ].includes(currentRole);
 
-  /*
-   * Chỉ ADMIN được ngừng hoạt động sản phẩm.
-   */
-  const canDeactivateProduct = user?.role === "ADMIN";
+  const canEditProduct = [
+    "ADMIN",
+    "MANAGER",
+  ].includes(currentRole);
+
+  const canDeactivateProduct = [
+    "ADMIN",
+    "MANAGER",
+  ].includes(currentRole);
 
   /*
   |--------------------------------------------------------------------------
@@ -84,13 +117,15 @@ function ProductListPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Tìm kiếm có trì hoãn 400ms
+  | Trì hoãn tìm kiếm
   |--------------------------------------------------------------------------
   */
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      setDebouncedKeyword(keyword.trim());
+      setDebouncedKeyword(
+        keyword.trim()
+      );
     }, 400);
 
     return () => {
@@ -99,9 +134,11 @@ function ProductListPage() {
   }, [keyword]);
 
   /*
-   * Khi thay đổi bộ lọc, sắp xếp hoặc số dòng
-   * thì quay lại trang đầu tiên.
-   */
+  |--------------------------------------------------------------------------
+  | Quay về trang đầu khi thay đổi bộ lọc
+  |--------------------------------------------------------------------------
+  */
+
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -114,7 +151,7 @@ function ProductListPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | Tải sản phẩm khi trang hoặc bộ lọc thay đổi
+  | Tải sản phẩm
   |--------------------------------------------------------------------------
   */
 
@@ -133,13 +170,20 @@ function ProductListPage() {
     try {
       setLoadingCategories(true);
 
-      const data = await getCategories();
+      const data =
+        await getCategories();
 
       setCategories(
-        Array.isArray(data) ? data : []
+        Array.isArray(data)
+          ? data
+          : []
       );
     } catch (err) {
-      console.error("Lỗi tải danh mục:", err);
+      console.error(
+        "Lỗi tải danh mục:",
+        err
+      );
+
       setCategories([]);
     } finally {
       setLoadingCategories(false);
@@ -154,47 +198,69 @@ function ProductListPage() {
       const data = await getProducts({
         page: currentPage,
         limit: pageSize,
-        keyword: debouncedKeyword || undefined,
-        category_id: categoryFilter || undefined,
-        status: statusFilter || undefined,
+
+        keyword:
+          debouncedKeyword ||
+          undefined,
+
+        category_id:
+          categoryFilter ||
+          undefined,
+
+        status:
+          statusFilter ||
+          undefined,
+
         sort_by: sortBy,
       });
 
-      const productRows = Array.isArray(data?.products)
-        ? data.products
-        : [];
+      const productRows =
+        Array.isArray(
+          data?.products
+        )
+          ? data.products
+          : [];
 
-      const paginationData = data?.pagination || {};
+      const paginationData =
+        data?.pagination || {};
 
       setProducts(productRows);
 
       setPagination({
         page: Number(
-          paginationData.page || currentPage
+          paginationData.page ||
+            currentPage
         ),
 
         limit: Number(
-          paginationData.limit || pageSize
+          paginationData.limit ||
+            pageSize
         ),
 
         total_items: Number(
-          paginationData.total_items || 0
+          paginationData.total_items ||
+            0
         ),
 
         total_pages: Math.max(
           1,
           Number(
-            paginationData.total_pages || 1
+            paginationData.total_pages ||
+              1
           )
         ),
 
-        has_previous_page: Boolean(
-          paginationData.has_previous_page
-        ),
+        has_previous_page:
+          Boolean(
+            paginationData
+              .has_previous_page
+          ),
 
-        has_next_page: Boolean(
-          paginationData.has_next_page
-        ),
+        has_next_page:
+          Boolean(
+            paginationData
+              .has_next_page
+          ),
       });
     } catch (err) {
       console.error(
@@ -237,23 +303,24 @@ function ProductListPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn ngừng hoạt động sản phẩm "${product.name}" không?`
-    );
+    const confirmed =
+      window.confirm(
+        `Bạn có chắc muốn ngừng hoạt động sản phẩm "${product.name}" không?`
+      );
 
     if (!confirmed) {
       return;
     }
 
     try {
-      await deactivateProduct(product.id);
+      await deactivateProduct(
+        product.id
+      );
 
-      alert("Đã ngừng hoạt động sản phẩm.");
+      alert(
+        "Đã ngừng hoạt động sản phẩm."
+      );
 
-      /*
-       * Tải lại dữ liệu từ backend để tổng số,
-       * bộ lọc và phân trang luôn chính xác.
-       */
       await loadProducts();
     } catch (err) {
       console.error(
@@ -291,13 +358,16 @@ function ProductListPage() {
   */
 
   function handleImageError(event) {
-    event.currentTarget.onerror = null;
-    event.currentTarget.src = PLACEHOLDER_IMAGE;
+    event.currentTarget.onerror =
+      null;
+
+    event.currentTarget.src =
+      PLACEHOLDER_IMAGE;
   }
 
   /*
   |--------------------------------------------------------------------------
-  | Hiển thị mức tồn tối thiểu
+  | Hiển thị tồn tối thiểu
   |--------------------------------------------------------------------------
   */
 
@@ -309,7 +379,9 @@ function ProductListPage() {
     if (minimumStock <= 0) {
       return (
         <div>
-          <span className="fw-semibold">0</span>
+          <span className="fw-semibold">
+            0
+          </span>
 
           <div className="mt-1">
             <span className="badge bg-secondary">
@@ -323,7 +395,9 @@ function ProductListPage() {
     return (
       <div>
         <span className="fw-semibold">
-          {minimumStock}
+          {minimumStock.toLocaleString(
+            "vi-VN"
+          )}
         </span>
 
         <div className="mt-1">
@@ -335,53 +409,68 @@ function ProductListPage() {
     );
   }
 
-  const totalItems = pagination.total_items;
-  const totalPages = pagination.total_pages;
+  const totalItems =
+    pagination.total_items;
+
+  const totalPages =
+    pagination.total_pages;
 
   const firstItemNumber =
     totalItems === 0
       ? 0
-      : (currentPage - 1) * pageSize + 1;
+      : (currentPage - 1) *
+          pageSize +
+        1;
 
-  const lastItemNumber = Math.min(
-    currentPage * pageSize,
-    totalItems
-  );
-
-  /*
-   * Tạo tối đa 5 nút trang gần trang hiện tại.
-   */
-  const visiblePages = useMemo(() => {
-    const maximumVisiblePages = 5;
-
-    let startPage = Math.max(
-      1,
-      currentPage -
-        Math.floor(maximumVisiblePages / 2)
+  const lastItemNumber =
+    Math.min(
+      currentPage * pageSize,
+      totalItems
     );
 
-    let endPage = Math.min(
+  const visiblePages =
+    useMemo(() => {
+      const maximumVisiblePages =
+        5;
+
+      let startPage = Math.max(
+        1,
+        currentPage -
+          Math.floor(
+            maximumVisiblePages /
+              2
+          )
+      );
+
+      let endPage = Math.min(
+        totalPages,
+        startPage +
+          maximumVisiblePages -
+          1
+      );
+
+      startPage = Math.max(
+        1,
+        endPage -
+          maximumVisiblePages +
+          1
+      );
+
+      const pages = [];
+
+      for (
+        let page = startPage;
+        page <= endPage;
+        page += 1
+      ) {
+        pages.push(page);
+      }
+
+      return pages;
+    }, [
+      currentPage,
       totalPages,
-      startPage + maximumVisiblePages - 1
-    );
-
-    startPage = Math.max(
-      1,
-      endPage - maximumVisiblePages + 1
-    );
-
-    const pages = [];
-
-    for (
-      let page = startPage;
-      page <= endPage;
-      page += 1
-    ) {
-      pages.push(page);
-    }
-
-    return pages;
-  }, [currentPage, totalPages]);
+    ]);
 
   return (
     <div>
@@ -392,18 +481,20 @@ function ProductListPage() {
           </h1>
 
           <p className="text-muted mb-0">
-            {canManageProduct
+            {canEditProduct
               ? "Quản lý thông tin và mức tồn tối thiểu của sản phẩm."
-              : "Xem thông tin sản phẩm trong kho."}
+              : "Xem và thêm sản phẩm mới phục vụ nhập kho."}
           </p>
         </div>
 
-        {canManageProduct && (
+        {canCreateProduct && (
           <button
             type="button"
             className="btn btn-primary"
             onClick={() =>
-              navigate("/products/create")
+              navigate(
+                "/products/create"
+              )
             }
           >
             <i className="bi bi-plus-lg me-2" />
@@ -412,13 +503,21 @@ function ProductListPage() {
         )}
       </div>
 
+      {currentRole === "STAFF" && (
+        <div className="alert alert-info">
+          Bạn được thêm sản phẩm mới nhưng
+          không được sửa hoặc ngừng hoạt
+          động sản phẩm đã có.
+        </div>
+      )}
+
       {error && (
         <div className="alert alert-danger">
           {error}
         </div>
       )}
 
-      {/* Tìm kiếm và bộ lọc */}
+      {/* Bộ lọc */}
       <div className="card border-0 shadow-sm mb-4">
         <div className="card-body">
           <div className="row g-3 align-items-end">
@@ -442,7 +541,9 @@ function ProductListPage() {
                   placeholder="Tên sản phẩm, mã SKU..."
                   value={keyword}
                   onChange={(event) =>
-                    setKeyword(event.target.value)
+                    setKeyword(
+                      event.target.value
+                    )
                   }
                 />
               </div>
@@ -460,7 +561,9 @@ function ProductListPage() {
                 id="category-filter"
                 className="form-select"
                 value={categoryFilter}
-                disabled={loadingCategories}
+                disabled={
+                  loadingCategories
+                }
                 onChange={(event) =>
                   setCategoryFilter(
                     event.target.value
@@ -473,14 +576,16 @@ function ProductListPage() {
                     : "Tất cả danh mục"}
                 </option>
 
-                {categories.map((category) => (
-                  <option
-                    key={category.id}
-                    value={category.id}
-                  >
-                    {category.name}
-                  </option>
-                ))}
+                {categories.map(
+                  (category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                    >
+                      {category.name}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -520,7 +625,9 @@ function ProductListPage() {
               <button
                 type="button"
                 className="btn btn-outline-secondary w-100"
-                onClick={handleResetFilters}
+                onClick={
+                  handleResetFilters
+                }
               >
                 <i className="bi bi-arrow-counterclockwise me-2" />
                 Xóa lọc
@@ -540,7 +647,9 @@ function ProductListPage() {
                 className="form-select"
                 value={sortBy}
                 onChange={(event) =>
-                  setSortBy(event.target.value)
+                  setSortBy(
+                    event.target.value
+                  )
                 }
               >
                 <option value="newest">
@@ -583,7 +692,10 @@ function ProductListPage() {
                 value={pageSize}
                 onChange={(event) =>
                   setPageSize(
-                    Number(event.target.value)
+                    Number(
+                      event.target
+                        .value
+                    )
                   )
                 }
               >
@@ -618,7 +730,7 @@ function ProductListPage() {
         </div>
       </div>
 
-      {/* Danh sách sản phẩm */}
+      {/* Danh sách */}
       <div className="card border-0 shadow-sm">
         <div className="card-body">
           <div className="table-responsive">
@@ -657,133 +769,154 @@ function ProductListPage() {
                       Đang tải dữ liệu...
                     </td>
                   </tr>
-                ) : products.length === 0 ? (
+                ) : products.length ===
+                  0 ? (
                   <tr>
                     <td
                       colSpan="8"
                       className="text-center text-muted py-5"
                     >
                       <i className="bi bi-box-seam fs-2 d-block mb-2" />
-                      Không tìm thấy sản phẩm phù hợp.
+                      Không tìm thấy sản phẩm
+                      phù hợp.
                     </td>
                   </tr>
                 ) : (
-                  products.map((product, index) => (
-                    <tr key={product.id}>
-                      <td>
-                        {firstItemNumber + index}
-                      </td>
+                  products.map(
+                    (
+                      product,
+                      index
+                    ) => (
+                      <tr
+                        key={product.id}
+                      >
+                        <td>
+                          {firstItemNumber +
+                            index}
+                        </td>
 
-                      <td>
-                        <img
-                          src={
-                            product.image_url ||
-                            PLACEHOLDER_IMAGE
-                          }
-                          alt={
-                            product.name ||
-                            "Ảnh sản phẩm"
-                          }
-                          width="56"
-                          height="56"
-                          className="rounded border bg-light"
-                          style={{
-                            objectFit: "contain",
-                          }}
-                          onError={handleImageError}
-                        />
-                      </td>
-
-                      <td>
-                        <span className="fw-semibold">
-                          {product.sku || "Không có"}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div className="fw-semibold">
-                          {product.name}
-                        </div>
-
-                        <div className="text-muted small">
-                          ID: {product.id}
-                        </div>
-                      </td>
-
-                      <td>
-                        {product.category_name ||
-                          "Chưa phân loại"}
-                      </td>
-
-                      <td>
-                        {renderMinimumStock(product)}
-                      </td>
-
-                      <td>
-                        <span
-                          className={`badge ${
-                            product.status === "active"
-                              ? "bg-success"
-                              : "bg-secondary"
-                          }`}
-                        >
-                          {product.status === "active"
-                            ? "Đang hoạt động"
-                            : "Ngừng hoạt động"}
-                        </span>
-                      </td>
-
-                      <td>
-                        <div className="d-flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() =>
-                              navigate(
-                                `/products/${product.id}`
-                              )
+                        <td>
+                          <img
+                            src={
+                              product.image_url ||
+                              PLACEHOLDER_IMAGE
                             }
-                          >
-                            Xem
-                          </button>
+                            alt={
+                              product.name ||
+                              "Ảnh sản phẩm"
+                            }
+                            width="56"
+                            height="56"
+                            className="rounded border bg-light"
+                            style={{
+                              objectFit:
+                                "contain",
+                            }}
+                            onError={
+                              handleImageError
+                            }
+                          />
+                        </td>
 
-                          {canManageProduct && (
+                        <td>
+                          <span className="fw-semibold">
+                            {product.sku ||
+                              "Không có"}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div className="fw-semibold">
+                            {product.name}
+                          </div>
+
+                          <div className="text-muted small">
+                            ID:{" "}
+                            {product.id}
+                          </div>
+                        </td>
+
+                        <td>
+                          {product.category_name ||
+                            "Chưa phân loại"}
+                        </td>
+
+                        <td>
+                          {renderMinimumStock(
+                            product
+                          )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`badge ${
+                              product.status ===
+                              "active"
+                                ? "bg-success"
+                                : "bg-secondary"
+                            }`}
+                          >
+                            {product.status ===
+                            "active"
+                              ? "Đang hoạt động"
+                              : "Ngừng hoạt động"}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div className="d-flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="btn btn-sm btn-outline-warning"
+                              className="btn btn-sm btn-outline-primary"
                               onClick={() =>
                                 navigate(
-                                  `/products/${product.id}/edit`
+                                  `/products/${product.id}`
                                 )
                               }
                             >
-                              Sửa
+                              Xem
                             </button>
-                          )}
 
-                          {canDeactivateProduct &&
-                            product.status ===
-                              "active" && (
+                            {canEditProduct && (
                               <button
                                 type="button"
-                                className="btn btn-sm btn-outline-danger"
+                                className="btn btn-sm btn-outline-warning"
                                 onClick={() =>
-                                  handleDeactivate(product)
+                                  navigate(
+                                    `/products/${product.id}/edit`
+                                  )
                                 }
                               >
-                                Ngừng hoạt động
+                                Sửa
                               </button>
                             )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+
+                            {canDeactivateProduct &&
+                              product.status ===
+                                "active" && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-danger"
+                                  onClick={() =>
+                                    handleDeactivate(
+                                      product
+                                    )
+                                  }
+                                >
+                                  Ngừng hoạt động
+                                </button>
+                              )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Thông tin và nút phân trang */}
+          {/* Phân trang */}
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 border-top pt-3 mt-2">
             <div className="text-muted small">
               Hiển thị{" "}
@@ -814,15 +947,19 @@ function ProductListPage() {
                     type="button"
                     className="page-link"
                     disabled={
-                      currentPage === 1 ||
+                      currentPage ===
+                        1 ||
                       loading
                     }
                     onClick={() =>
                       setCurrentPage(
-                        (previousPage) =>
+                        (
+                          previousPage
+                        ) =>
                           Math.max(
                             1,
-                            previousPage - 1
+                            previousPage -
+                              1
                           )
                       )
                     }
@@ -832,31 +969,37 @@ function ProductListPage() {
                   </button>
                 </li>
 
-                {visiblePages.map((page) => (
-                  <li
-                    key={page}
-                    className={`page-item ${
-                      currentPage === page
-                        ? "active"
-                        : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="page-link"
-                      disabled={loading}
-                      onClick={() =>
-                        setCurrentPage(page)
-                      }
+                {visiblePages.map(
+                  (page) => (
+                    <li
+                      key={page}
+                      className={`page-item ${
+                        currentPage ===
+                        page
+                          ? "active"
+                          : ""
+                      }`}
                     >
-                      {page}
-                    </button>
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        className="page-link"
+                        disabled={loading}
+                        onClick={() =>
+                          setCurrentPage(
+                            page
+                          )
+                        }
+                      >
+                        {page}
+                      </button>
+                    </li>
+                  )
+                )}
 
                 <li
                   className={`page-item ${
-                    currentPage === totalPages
+                    currentPage ===
+                    totalPages
                       ? "disabled"
                       : ""
                   }`}
@@ -871,10 +1014,13 @@ function ProductListPage() {
                     }
                     onClick={() =>
                       setCurrentPage(
-                        (previousPage) =>
+                        (
+                          previousPage
+                        ) =>
                           Math.min(
                             totalPages,
-                            previousPage + 1
+                            previousPage +
+                              1
                           )
                       )
                     }
